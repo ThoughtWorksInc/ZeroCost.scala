@@ -3,20 +3,31 @@ package com.thoughtworks.zerocost.tryt
 import scala.language.higherKinds
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
-import cats.{Applicative, Functor, Monad, MonadError, Semigroup}
+import cats._
 import com.thoughtworks.zerocost.parallel.covariant.Parallel
 
-private[tryt] sealed abstract class CovariantTryTInstances2 { this: covariant.type =>
+private[tryt] sealed abstract class CovariantTryTInstances3 { this: covariant.type =>
 
   /** @group Type classes */
-  implicit final def covariantTryTParallelApplicative[F[+ _]](
-      implicit F0: Applicative[Parallel[F, ?]],
-      S0: Semigroup[Throwable]): Applicative[Parallel[TryT[F, `+?`], ?]] = {
-    new Serializable with TryTParallelApplicative[F] {
-      override implicit def F: Applicative[Parallel[F, ?]] = F0
+  implicit final def covariantTryTParallelMonadError[F[+ _]](
+      implicit F0: Monad[F],
+      S0: Semigroup[Throwable]): MonadError[Parallel[TryT[F, `+?`], ?], Throwable] = {
+    Parallel.liftTypeClass[MonadError[?[_], Throwable], TryT[F, `+?`]](new TryTMonadError[F] with TryTParallelApply[F] {
       override implicit def S: Semigroup[Throwable] = S0
+      implicit override def F: Monad[F] = F0
+    })
+  }
+}
 
-    }
+private[tryt] sealed abstract class CovariantTryTInstances2 extends CovariantTryTInstances3 { this: covariant.type =>
+
+  /** @group Type classes */
+  implicit final def covariantTryTParallelApply[F[+ _]](implicit F0: Apply[F],
+                                                        S0: Semigroup[Throwable]): Apply[Parallel[TryT[F, `+?`], ?]] = {
+    Parallel.liftTypeClass[Apply, TryT[F, `+?`]](new TryTParallelApply[F] {
+      override implicit def S: Semigroup[Throwable] = S0
+      implicit override def F: Apply[F] = F0
+    })
   }
 }
 
@@ -144,46 +155,18 @@ object covariant extends CovariantTryTInstances0 with Serializable {
 
   }
 
-  private[tryt] trait TryTParallelApplicative[F[+ _]] extends Applicative[Parallel[TryT[F, `+?`], ?]] {
-    implicit protected def F: Applicative[Parallel[F, ?]]
+  private[tryt] trait TryTParallelApply[F[+ _]] extends Apply[TryT[F, `+?`]] with TryTFunctor[F] {
+    implicit protected def F: Apply[F]
     implicit protected def S: Semigroup[Throwable]
 
-    override def pure[A](a: A): Parallel[TryT[F, `+?`], A] = {
-      val Parallel(trytA) = F.pure(Try(a))
-      Parallel[TryT[F, `+?`], A](TryT[F, A](trytA))
-    }
-    override def map[A, B](pfa: Parallel[TryT[F, `+?`], A])(f: (A) => B): Parallel[TryT[F, `+?`], B] = {
-      val Parallel(TryT(fa)) = pfa
-      val Parallel(trytB) = F.map(Parallel[F, Try[A]](fa)) { tryA =>
-        tryA.flatMap { a =>
-          Try(f(a))
-        }
-      }
-      Parallel[TryT[F, `+?`], B](TryT(trytB))
-    }
+    override def ap[A, B](f: TryT[F, A => B])(fa: TryT[F, A]): TryT[F, B] = {
 
-    override def ap[A, B](f: Parallel[TryT[F, `+?`], A => B])(
-        fa: Parallel[TryT[F, `+?`], A]): Parallel[TryT[F, `+?`], B] = {
-
-      val fTryAP: Parallel[F, Try[A]] = try {
-        val Parallel(TryT(ftryA)) = fa
-        Parallel(ftryA)
-      } catch {
-        case NonFatal(e) =>
-          F.pure(Failure(e))
-      }
-
-      val fTryABP: Parallel[F, Try[A => B]] = try {
-        val Parallel(TryT(ftryF)) = f
-        Parallel(ftryF)
-      } catch {
-        case NonFatal(e) =>
-          F.pure(Failure(e))
-      }
+      val TryT(fTryAP) = fa
+      val TryT(fTryABP) = f
 
       import cats.syntax.all._
 
-      val fTryBP: Parallel[F, Try[B]] =
+      val fTryBP: F[Try[B]] =
         F.map2(fTryAP, fTryABP) { (tryA: Try[A], tryAB: Try[A => B]) =>
           tryA match {
             case Success(a) =>
@@ -204,8 +187,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
               }
           }
         }
-      val Parallel(fTryB) = fTryBP
-      Parallel(TryT(fTryB))
+      TryT(fTryBP)
     }
   }
 
