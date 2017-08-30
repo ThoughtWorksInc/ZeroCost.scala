@@ -70,7 +70,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
     def unapply[F[+ _], A](tryT: TryT[F, A]): Some[F[Try[A]]] = Some(opacityTypes.fromTryT(tryT))
 
     /** @group Converters */
-    def apply[F[+ _], A](tryT: F[Try[A]]): TryT[F, A] = TryT(tryT)
+    def apply[F[+ _], A](tryT: F[Try[A]]): TryT[F, A] = opacityTypes.toTryT(tryT)
 
   }
 
@@ -211,17 +211,18 @@ object covariant extends CovariantTryTInstances0 with Serializable {
 
   /** A monad transformer for exception handling.
     *
-    * @see This `TryT` transfomer is similar to [[scalaz.EitherT]],
+    * @see This `TryT` transfomer is similar to [[cats.data.EitherT]],
     *      except `TryT` handles exceptions thrown in callback functions passed to
-    *      [[scalaz.Monad.map map]], [[scalaz.Monad.flatMap flatMap]] or [[scalaz.Monad.pure pure]].
+    *      [[cats.Monad.map map]], [[cats.Monad.flatMap flatMap]] or [[cats.Monad.pure pure]].
     *
-    * @example As a monad transformer, `TryT` should be used with another monadic data type, like [[scalaz.Name]].
+    * @example As a monad transformer, `TryT` should be used with another monadic data type, like [[scala.Function0]].
     *
     *          {{{
-    *          import scalaz.Name
-    *          import com.thoughtworks.tryt.covariant.TryT, TryT._
+    *          import cats.instances.function._
+    *          import scala.util._
+    *          import com.thoughtworks.zerocost.tryt.covariant._
     *
-    *          type TryName[+A] = TryT[Name, A]
+    *          type TryName[+A] = TryT[Function0, A]
     *          }}}
     *
     *          Given a `validate` function,
@@ -230,22 +231,19 @@ object covariant extends CovariantTryTInstances0 with Serializable {
     *          def validate(s: String): Int = s.toInt
     *          }}}
     *
-    *          when creating a `TryT`-transformed [[scalaz.Name]] from the `validate`,
+    *          when creating a `TryT`-transformed [[scala.Function0]] from the `validate`,
     *
     *          {{{
-    *          import scalaz.syntax.all._
-    *          val invalidTry: TryName[Int] = validate("invalid input").pure[TryName]
+    *          import cats.syntax.all._
+    *          val invalidTry: TryName[Int] = TryT(() => Try(validate("invalid input")))
     *          }}}
     *
     *          then the exceptions thrown in `validate` call should be converted to a [[scala.util.Failure]];
     *
     *          {{{
-    *          import com.thoughtworks.tryt.covariant.TryT._
+    *          val TryT(failure) = invalidTry
     *
-    *          val TryT(Name(failure)) = invalidTry
-    *
-    *          import scala.util._
-    *          failure should be(an[Failure[_]])
+    *          failure() should be(an[Failure[_]])
     *          }}}
     *
     *          and when there is no exception thrown in `validate` call,
@@ -257,24 +255,29 @@ object covariant extends CovariantTryTInstances0 with Serializable {
     *          then the result of `validate` call should be converted to a [[scala.util.Success]];
     *
     *          {{{
-    *          val TryT(Name(success)) = validTry
-    *          success should be(Success(42))
+    *          val TryT(success) = validTry
+    *          success() should be(Success(42))
     *          }}}
     *
-    *          and when the `TryT`-transformed [[scalaz.Name]] is built from a `for`-comprehension,
+    *          and when the `TryT`-transformed [[scala.Function0]] is built from a `for`-comprehension,
     *
     *          {{{
-    *          val invalidForComprehension: TryName[Int] = for {
-    *            i <- validate("42").pure[TryName]
-    *            j <- validate("invalid input").pure[TryName]
-    *          } yield i + j
+//    *          val invalidForComprehension: TryName[Int] = for {
+//    *            i <- validate("42").pure[TryName]
+//    *            j <- validate("invalid input").pure[TryName]
+//    *          } yield i + j
+    *          val invalidForComprehension: TryName[Int] = validate("42").pure[TryName].flatMap { i =>
+    *            validate("invalid input").pure[TryName].map { j =>
+    *              i + j
+    *            }
+    *          }
     *          }}}
     *
     *          then the exceptions thrown in the `for`-comprehension should be converted to a [[scala.util.Failure]];
     *
     *          {{{
-    *          val TryT(Name(failure2)) = invalidTry
-    *          failure2 should be(an[Failure[_]])
+    *          val TryT(failure2) = invalidTry
+    *          failure2() should be(an[Failure[_]])
     *          }}}
     *
     *
