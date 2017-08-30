@@ -351,9 +351,9 @@ object covariant extends CovariantResourceTInstances0 {
 
   /** The companion object of [[ResourceT]] that contains converters and type classes.
     *
-    * @note There are some implicit method that provides [[scalaz.Monad]]s as monad transformers of `F`.
+    * @note There are some implicit method that provides [[cats.Monad]]s as monad transformers of `F`.
     *       Those monads running will collect all resources,
-    *       which will be open and release altogether when [[ResourceT.run]] is called.
+    *       which will be open and release altogether when [[CovariantResourceTOps.run]] is called.
     */
   object ResourceT {
 

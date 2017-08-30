@@ -59,7 +59,7 @@ object continuation {
     * @see [[UnitContinuationOps]] for extension methods for this `UnitContinuationOps`.
     * @see [[ParallelContinuation]] for parallel version of this `UnitContinuation`.
     * @note This `UnitContinuation` type does not support exception handling.
-    * @see [[com.thoughtworks.future.Future Future]] for asynchronous task that supports exception handling.
+    * @see [[com.thoughtworks.zerocost.future.Future Future]] for asynchronous task that supports exception handling.
     * @template
     */
   type UnitContinuation[+A] = Continuation[Unit, A]
@@ -123,7 +123,7 @@ object continuation {
     }
   }
 
-  /** [[Parallel]]-tagged type of [[UnitContinuation]] that needs to be executed in parallel when using an [[Applicative]] instance
+  /** [[com.thoughtworks.zerocost.parallel.covariant.Parallel Parallel]]-tagged type of [[UnitContinuation]] that needs to be executed in parallel when using an [[cats.Applicative]] instance
     *
     * @example Given two [[ParallelContinuation]]s that contain immediate values,
     *
@@ -244,7 +244,7 @@ object continuation {
       Continuation.async(start)
     }
 
-    /** A synonym of [[Continuation.now]] */
+    /** A synonym of [[Continuation.pure]] */
     @inline
     def pure[A](a: A): UnitContinuation[A] = {
       Continuation.pure(a)
@@ -345,7 +345,7 @@ object continuation {
       safeAsync(start)
     }
 
-    /** Extracts the underlying [[scalaz.ContT]] of `continuation`
+    /** Extracts the underlying [[scala.Function1]] of `continuation`
       *
       * @example This `unapply` can be used in pattern matching expression.
       *          {{{
