@@ -351,6 +351,15 @@ object covariant extends CovariantResourceTInstances0 {
       ResourceT(resource)
     }
 
+    def autoCloseable[F[+ _]: Applicative, A <: AutoCloseable](run: F[A]): ResourceT[F, A] = {
+      val resource: F[Resource[F, A]] = run.map { a: A =>
+        Resource(a, callByNameUnitCache.pure[F].map { _: Unit =>
+          a.close()
+        })
+      }
+      ResourceT(resource)
+    }
+
   }
 
   /** @group Type classes */
