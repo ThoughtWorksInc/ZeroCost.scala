@@ -11,9 +11,9 @@ private[tryt] sealed abstract class CovariantTryTInstances3 { this: covariant.ty
   /** @group Type classes */
   implicit final def covariantTryTParallelMonadError[F[+ _]](
       implicit F0: Monad[F],
-      S0: Semigroup[Throwable]): MonadError[Parallel[TryT[F, `+?`], ?], Throwable] = {
+      E0: Semigroup[Throwable]): MonadError[Parallel[TryT[F, `+?`], ?], Throwable] = {
     Parallel.liftTypeClass[MonadError[?[_], Throwable], TryT[F, `+?`]](new TryTMonadError[F] with TryTParallelApply[F] {
-      override implicit def S: Semigroup[Throwable] = S0
+      override implicit def E: Semigroup[Throwable] = E0
       implicit override def F: Monad[F] = F0
     })
   }
@@ -23,9 +23,9 @@ private[tryt] sealed abstract class CovariantTryTInstances2 extends CovariantTry
 
   /** @group Type classes */
   implicit final def covariantTryTParallelApply[F[+ _]](implicit F0: Apply[F],
-                                                        S0: Semigroup[Throwable]): Apply[Parallel[TryT[F, `+?`], ?]] = {
+                                                        E0: Semigroup[Throwable]): Apply[Parallel[TryT[F, `+?`], ?]] = {
     Parallel.liftTypeClass[Apply, TryT[F, `+?`]](new TryTParallelApply[F] {
-      override implicit def S: Semigroup[Throwable] = S0
+      override implicit def E: Semigroup[Throwable] = E0
       implicit override def F: Apply[F] = F0
     })
   }
@@ -157,7 +157,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
 
   private[tryt] trait TryTParallelApply[F[+ _]] extends Apply[TryT[F, `+?`]] with TryTFunctor[F] {
     implicit protected def F: Apply[F]
-    implicit protected def S: Semigroup[Throwable]
+    implicit protected def E: Semigroup[Throwable]
 
     override def ap[A, B](f: TryT[F, A => B])(fa: TryT[F, A]): TryT[F, B] = {
 
