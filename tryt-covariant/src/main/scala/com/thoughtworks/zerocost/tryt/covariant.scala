@@ -262,10 +262,6 @@ object covariant extends CovariantTryTInstances0 with Serializable {
     *          and when the `TryT`-transformed [[scala.Function0]] is built from a `for`-comprehension,
     *
     *          {{{
-//    *          val invalidForComprehension: TryName[Int] = for {
-//    *            i <- validate("42").pure[TryName]
-//    *            j <- validate("invalid input").pure[TryName]
-//    *          } yield i + j
     *          val invalidForComprehension: TryName[Int] = validate("42").pure[TryName].flatMap { i =>
     *            validate("invalid input").pure[TryName].map { j =>
     *              i + j

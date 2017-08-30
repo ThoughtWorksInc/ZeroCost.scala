@@ -13,7 +13,7 @@ private[thoughtworks] sealed abstract class CovariantResourceTInstances3 {
 
   /** @group Type classes */
   implicit def covariantResourceTApplicative[F[+ _]: Applicative]: Applicative[ResourceT[F, ?]] =
-    new Serializable with CovariantResourceTApplicative[F] {
+    new CovariantResourceTApplicative[F] {
       override private[thoughtworks] def typeClass = implicitly
     }
 }
@@ -22,14 +22,31 @@ private[thoughtworks] sealed abstract class CovariantResourceTInstances2 extends
 
   /** @group Type classes */
   implicit def covariantResourceTMonad[F[+ _]: Monad]: Monad[ResourceT[F, ?]] =
-    new Serializable with CovariantResourceTMonad[F] {
+    new CovariantResourceTMonad[F] {
       private[thoughtworks] override def typeClass = implicitly
     }
 }
 
-private[thoughtworks] sealed abstract class CovariantResourceTInstances1 extends CovariantResourceTInstances2 {}
+private[thoughtworks] sealed abstract class CovariantResourceTInstances1 extends CovariantResourceTInstances2 {
 
-private[thoughtworks] sealed abstract class CovariantResourceTInstances0 extends CovariantResourceTInstances1 {}
+  /** @group Type classes */
+  implicit def covariantResourceTApplicativeIO[F[+ _]: Applicative: LiftIO]
+    : Applicative[ResourceT[F, ?]] with LiftIO[ResourceT[F, ?]] =
+    new CovariantResourceTApplicative[F] with CovariantResourceTLiftIO[F] {
+      override private[thoughtworks] def typeClass = implicitly
+      override private[thoughtworks] def L: LiftIO[F] = implicitly
+    }
+}
+
+private[thoughtworks] sealed abstract class CovariantResourceTInstances0 extends CovariantResourceTInstances1 {
+
+  /** @group Type classes */
+  implicit def covariantResourceTMonadIO[F[+ _]: Monad: LiftIO]: Monad[ResourceT[F, ?]] with LiftIO[ResourceT[F, ?]] =
+    new CovariantResourceTMonad[F] with CovariantResourceTLiftIO[F] {
+      override private[thoughtworks] def typeClass = implicitly
+      override private[thoughtworks] def L: LiftIO[F] = implicitly
+    }
+}
 
 private[thoughtworks] trait CovariantResourceTPoint[F[+ _]] extends Applicative[ResourceT[F, ?]] {
   private[thoughtworks] implicit def typeClass: Applicative[F]
@@ -56,7 +73,7 @@ private[thoughtworks] trait CovariantResourceTApplicative[F[+ _]]
   }
 }
 
-private[thoughtworks] trait CovariantResourceTApplicativeIO[F[+ _]]
+private[thoughtworks] trait CovariantResourceTLiftIO[F[+ _]]
     extends LiftIO[ResourceT[F, ?]]
     with CovariantResourceTApplicative[F] {
   private[thoughtworks] implicit def L: LiftIO[F]
@@ -384,7 +401,7 @@ object covariant extends CovariantResourceTInstances0 {
   implicit def covariantResourceTParallelApplicative[F[+ _]](
       implicit F0: Applicative[Parallel[F, ?]]
   ): Applicative[Parallel[ResourceT[F, `+?`], ?]] = {
-    new Serializable with CovariantResourceTParallelApplicative[F] {
+    new CovariantResourceTParallelApplicative[F] {
       override private[thoughtworks] implicit def typeClass = F0
     }
   }
