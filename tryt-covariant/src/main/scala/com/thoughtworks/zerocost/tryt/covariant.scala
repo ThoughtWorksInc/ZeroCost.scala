@@ -1,13 +1,46 @@
-package com.thoughtworks.zerocost.transformers.tryt
+package com.thoughtworks.zerocost.tryt
 
 import scala.language.higherKinds
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
-import cats.{Applicative, FlatMap, Functor, Monad, MonadError, Semigroup}
+import cats.{Applicative, Functor, Monad, MonadError, Semigroup}
 import com.thoughtworks.zerocost.parallel.covariant.Parallel
 
+private[tryt] sealed abstract class CovariantTryTInstances2 { this: covariant.type =>
+
+  /** @group Type classes */
+  implicit final def covariantTryTParallelApplicative[F[+ _]](
+      implicit F0: Applicative[Parallel[F, ?]],
+      S0: Semigroup[Throwable]): Applicative[Parallel[TryT[F, `+?`], ?]] = {
+    new Serializable with TryTParallelApplicative[F] {
+      override implicit def F: Applicative[Parallel[F, ?]] = F0
+      override implicit def S: Semigroup[Throwable] = S0
+
+    }
+  }
+}
+
+private[tryt] sealed abstract class CovariantTryTInstances1 extends CovariantTryTInstances2 { this: covariant.type =>
+
+  /** @group Type classes */
+  implicit final def covariantTryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, `+?`], Throwable] = {
+    new Serializable with TryTMonadError[F] {
+      implicit override def F: Monad[F] = F0
+    }
+  }
+}
+
+private[tryt] sealed abstract class CovariantTryTInstances0 extends CovariantTryTInstances1 { this: covariant.type =>
+
+  /** @group Type classes */
+  implicit final def covariantTryTFunctor[F[+ _]](implicit F0: Functor[F]): Functor[TryT[F, ?]] =
+    new Serializable with TryTFunctor[F] {
+      implicit override def F: Functor[F] = F0
+    }
+}
+
 /** The namespace that contains the covariant [[TryT]]. */
-object covariant extends Serializable {
+object covariant extends CovariantTryTInstances0 with Serializable {
 
   private[tryt] trait OpacityTypes extends Serializable {
     type TryT[F[+ _], +A]
@@ -31,7 +64,7 @@ object covariant extends Serializable {
 
   }
 
-  object TryT extends TryTInstances0 with Serializable {
+  object TryT extends Serializable {
 
     /** @group Converters */
     def unapply[F[+ _], A](tryT: TryT[F, A]): Some[F[Try[A]]] = Some(opacityTypes.fromTryT(tryT))
@@ -39,39 +72,6 @@ object covariant extends Serializable {
     /** @group Converters */
     def apply[F[+ _], A](tryT: F[Try[A]]): TryT[F, A] = TryT(tryT)
 
-  }
-
-  private[tryt] sealed abstract class TryTInstances2 { this: TryT.type =>
-
-    /** @group Type classes */
-    implicit final def tryTParallelApplicative[F[+ _]](
-        implicit F0: Applicative[Parallel[F, ?]],
-        S0: Semigroup[Throwable]): Applicative[Parallel[TryT[F, `+?`], ?]] = {
-      new Serializable with TryTParallelApplicative[F] {
-        override implicit def F: Applicative[Parallel[F, ?]] = F0
-        override implicit def S: Semigroup[Throwable] = S0
-
-      }
-    }
-  }
-
-  private[tryt] sealed abstract class TryTInstances1 extends TryTInstances2 { this: TryT.type =>
-
-    /** @group Type classes */
-    implicit final def tryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, `+?`], Throwable] = {
-      new Serializable with TryTMonadError[F] {
-        implicit override def F: Monad[F] = F0
-      }
-    }
-  }
-
-  private[tryt] sealed abstract class TryTInstances0 extends TryTInstances1 { this: TryT.type =>
-
-    /** @group Type classes */
-    implicit final def tryTFunctor[F[+ _]](implicit F0: Functor[F]): Functor[TryT[F, ?]] =
-      new Serializable with TryTFunctor[F] {
-        implicit override def F: Functor[F] = F0
-      }
   }
 
   import opacityTypes._
