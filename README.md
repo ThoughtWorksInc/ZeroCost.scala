@@ -1,5 +1,5 @@
 # catz
-**catz** is a collection of light-weight data-structures that have zero memory overhead.
+**catz** is a collection of **cat**egorical data-structures that have **z**ero memory overhead.
 All those data-structures are [opacity aliases](https://www.reddit.com/r/scala/comments/5qbdgq/value_types_without_anyval/dcxze9q/),
 expose their features via static methods and [cats](https://typelevel.org/cats/) type classes.
 
