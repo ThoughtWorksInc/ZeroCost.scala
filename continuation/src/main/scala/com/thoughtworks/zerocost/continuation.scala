@@ -201,6 +201,8 @@ object continuation {
     * @group Type class instances
     */
   implicit object continuationParallelApplicative extends Applicative[ParallelContinuation] with Serializable {
+    override val unit = super.unit
+
     override def pure[A](x: A): ParallelContinuation[A] = {
       Parallel(continuationMonad.pure(x))
     }
@@ -406,6 +408,7 @@ object continuation {
     * @group Type class instances
     */
   implicit def continuationMonad[R]: Monad[Continuation[R, +?]] = new Monad[Continuation[R, +?]] with Serializable {
+    override val unit = super.unit
     override def pure[A](x: A): Continuation[R, A] = Continuation.pure(x)
     override def flatMap[A, B](fa: Continuation[R, A])(f: (A) => Continuation[R, B]): Continuation[R, B] =
       Continuation.safeAsync(Bind(fa, f))
