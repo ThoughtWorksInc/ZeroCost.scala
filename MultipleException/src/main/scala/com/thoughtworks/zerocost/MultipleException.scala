@@ -1,4 +1,4 @@
-package com.thoughtworks.zerocost.MultipleException
+package com.thoughtworks.zerocost
 
 import java.io.{PrintStream, PrintWriter}
 
