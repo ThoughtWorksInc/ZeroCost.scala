@@ -1,10 +1,10 @@
-package com.thoughtworks.catz.transformers.tryt
+package com.thoughtworks.zerocost.transformers.tryt
 
 import scala.language.higherKinds
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import cats.{Applicative, FlatMap, Functor, Monad, MonadError, Semigroup}
-import com.thoughtworks.catz.parallel.covariant.Parallel
+import com.thoughtworks.zerocost.parallel.covariant.Parallel
 
 /** The namespace that contains the covariant [[TryT]]. */
 object covariant extends Serializable {

@@ -1,4 +1,4 @@
-package com.thoughtworks.catz.parallel
+package com.thoughtworks.zerocost.parallel
 
 import scala.language.higherKinds
 
