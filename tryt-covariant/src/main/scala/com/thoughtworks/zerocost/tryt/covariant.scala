@@ -44,7 +44,7 @@ private[tryt] sealed abstract class CovariantTryTInstances1 extends CovariantTry
 
   /** @group Type classes */
   implicit final def covariantTryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, `+?`], Throwable] = {
-    new Serializable with TryTMonadError[F] {
+    new TryTMonadError[F] {
       implicit override def F: Monad[F] = F0
     }
   }
