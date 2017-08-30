@@ -172,31 +172,8 @@ private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
   */
 object covariant extends CovariantResourceTInstances0 {
 
-  private[thoughtworks] final class CallByNameUnitCache(callByNameUnit: => Unit) {
-    @inline
-    def pure[F[_]](implicit applicative: Applicative[F]): F[Unit] = {
-      applicative.pure(callByNameUnit)
-    }
-  }
-// Disabled util com.thoughtworks.zerocost.continuation has been ported.
-//  /** A cache of `=> Unit`.
-//    *
-//    * @note When using this cache to create two `UnitContinuation[UnitContinuation]`s,
-//    *       {{{
-//    *       import com.thoughtworks.continuation._
-//    *       val continuation1 = covariant.callByNameUnitCache.pure[UnitContinuation]
-//    *       val continuation2 = covariant.callByNameUnitCache.pure[UnitContinuation]
-//    *       }}}
-//    *       then the two continuations should equal to each other.
-//    *
-//    *       {{{
-//    *       continuation1 should be(continuation2)
-//    *       }}}
-//    */
-  private[thoughtworks] val callByNameUnitCache = new CallByNameUnitCache(())
-
-  private[thoughtworks] def appendMonadicUnit[F[+ _]: Monad](f0: F[Unit], f1: F[Unit]): F[Unit] = {
-    val noop = callByNameUnitCache.pure[F]
+  private[thoughtworks] def appendMonadicUnit[F[+ _]](f0: F[Unit], f1: F[Unit])(implicit F: Monad[F]): F[Unit] = {
+    val noop = F.unit
     if (f0 == noop) {
       f1
     } else if (f1 == noop) {
@@ -316,8 +293,8 @@ object covariant extends CovariantResourceTInstances0 {
     }
 
     @inline
-    private[thoughtworks] def pure[F[+ _]: Applicative, A](value: A): Resource[F, A] = {
-      Resource[F, A](value, callByNameUnitCache.pure[F])
+    private[thoughtworks] def pure[F[+ _], A](value: A)(implicit F: Applicative[F]): Resource[F, A] = {
+      Resource[F, A](value, F.unit)
     }
   }
 
@@ -351,18 +328,16 @@ object covariant extends CovariantResourceTInstances0 {
     def pure[F[+ _]: Applicative, A](a: A): ResourceT[F, A] =
       ResourceT[F, A](Applicative[F].pure(Resource.pure(a)))
 
-    case object NoOpRelease extends (() => Unit) {
-      override def apply(): Unit = ()
-    }
-
-    def liftIO[F[+ _]: LiftIO, A](io: LiftIO.IO[A]): ResourceT[F, A] = {
-      ResourceT(LiftIO[F].liftIO(() => Resource(value = io(), release = LiftIO[F].liftIO(NoOpRelease))))
+    def liftIO[F[+ _]: LiftIO, A](io: IO[A]): ResourceT[F, A] = {
+      ResourceT(LiftIO[F].liftIO { () =>
+        Resource(value = io(), release = LiftIO[F].noop)
+      })
     }
 
     def delay[F[+ _]: Applicative: LiftIO, A](a: => A): ResourceT[F, A] = liftIO(a _)
 
-    def garbageCollected[F[+ _]: Applicative: LiftIO, A](fa: F[A]): ResourceT[F, A] = {
-      ResourceT(fa.map(Resource.pure[F, A](_)))
+    def garbageCollected[F[+ _]: Functor: LiftIO, A](fa: F[A]): ResourceT[F, A] = {
+      ResourceT(fa.map(Resource[F, A](_, LiftIO[F].noop)))
     }
 
     def nested[F[+ _]: Monad: LiftIO, A](fa: ResourceT[F, A]): ResourceT[F, A] = {
@@ -429,19 +404,18 @@ object covariant extends CovariantResourceTInstances0 {
       *
       *       Don't use this method if you need to retain `A` until `B` is released.
       */
-    def intransitiveMap[B](f: A => B)(implicit monad: Monad[F]): ResourceT[F, B] = {
+    def intransitiveMap[B](f: A => B)(implicit F: Monad[F]): ResourceT[F, B] = {
       ResourceT(
-        opacityTypes.fromResourceT(resourceT).flatMap { releasableA =>
-          val b = f(releasableA.value)
-          releasableA.release.map { _ =>
-            new Serializable with Resource[F, B] {
-              override val value: B = b
-
-              override val release: F[Unit] = {
-                callByNameUnitCache.pure[F]
+        opacityTypes.fromResourceT(resourceT).flatMap {
+          case Resource(a, releaseA) =>
+            val b = f(a)
+            if (releaseA == F.unit) {
+              F.pure(Resource.pure[F, B](b))
+            } else {
+              releaseA.map { _ =>
+                Resource.pure[F, B](b)
               }
             }
-          }
         }
       )
     }

@@ -18,6 +18,9 @@ trait LiftIO[F[_]] {
   @inline
   def delay[A](a: => A): F[A] = liftIO(a _)
 
+  @inline
+  def noop = liftIO(IO.NoOp)
+
 }
 
 object LiftIO {
@@ -26,6 +29,13 @@ object LiftIO {
 
     override def liftIO[A](io: IO[A]): Function0[A] = io
 
+  }
+
+  object IO {
+
+    val NoOp: IO[Unit] = { () =>
+      ()
+    }
   }
 
   type IO[+A] = Function0[A]
