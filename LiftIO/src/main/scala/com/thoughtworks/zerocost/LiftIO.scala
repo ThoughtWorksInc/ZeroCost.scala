@@ -24,7 +24,7 @@ object LiftIO {
 
   implicit object function0LiftIO extends LiftIO[Function0] {
 
-    override def liftIO[A](io: Function0[A]): () => A = io
+    override def liftIO[A](io: IO[A]): Function0[A] = io
 
   }
 
