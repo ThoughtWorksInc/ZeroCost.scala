@@ -5,8 +5,9 @@ import com.thoughtworks.zerocost.parallel.covariant.Parallel
 import covariant._
 
 import scala.language.higherKinds
-import opacityTypes.unwrap
 import cats.syntax.all._
+import com.thoughtworks.zerocost.LiftIO
+import com.thoughtworks.zerocost.LiftIO.IO
 
 private[thoughtworks] sealed abstract class CovariantResourceTInstances3 {
 
@@ -33,7 +34,7 @@ private[thoughtworks] sealed abstract class CovariantResourceTInstances0 extends
 private[thoughtworks] trait CovariantResourceTPoint[F[+ _]] extends Applicative[ResourceT[F, ?]] {
   private[thoughtworks] implicit def typeClass: Applicative[F]
 
-  override def pure[A](a: A): ResourceT[F, A] = covariant.ResourceT.delay(a)
+  override def pure[A](a: A): ResourceT[F, A] = covariant.ResourceT.pure(a)
 }
 
 private[thoughtworks] trait CovariantResourceTApplicative[F[+ _]]
@@ -42,7 +43,7 @@ private[thoughtworks] trait CovariantResourceTApplicative[F[+ _]]
 
   override def ap[A, B](f: ResourceT[F, (A) => B])(fa: ResourceT[F, A]): ResourceT[F, B] = {
     ResourceT(
-      Applicative[F].map2(unwrap(fa), unwrap(f)) { (releasableA, releasableF) =>
+      Applicative[F].map2(opacityTypes.fromResourceT(fa), opacityTypes.fromResourceT(f)) { (releasableA, releasableF) =>
         val releaseA = releasableA.release
         Resource[F, B](
           value = releasableF.value(releasableA.value),
@@ -55,6 +56,13 @@ private[thoughtworks] trait CovariantResourceTApplicative[F[+ _]]
   }
 }
 
+private[thoughtworks] trait CovariantResourceTApplicativeIO[F[+ _]]
+    extends LiftIO[ResourceT[F, ?]]
+    with CovariantResourceTApplicative[F] {
+  private[thoughtworks] implicit def L: LiftIO[F]
+
+  override def liftIO[A](io: IO[A]) = covariant.ResourceT.liftIO(io)
+}
 private[thoughtworks] trait CovariantResourceTParallelApplicative[F[+ _]]
     extends Applicative[Parallel[ResourceT[F, `+?`], ?]] {
   private[thoughtworks] implicit def typeClass: Applicative[Parallel[F, ?]]
@@ -112,7 +120,7 @@ private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
   private[thoughtworks] implicit override def typeClass: Monad[F]
 
   override def tailRecM[A, B](begin: A)(f: A => ResourceT[F, Either[A, B]]): ResourceT[F, B] = {
-    val fResourceB = typeClass.tailRecM(Resource.now[F, A](begin)) {
+    val fResourceB = typeClass.tailRecM(Resource.pure[F, A](begin)) {
       case Resource(a, release) =>
         val ResourceT(resourceEither) = f(a)
         resourceEither.map {
@@ -128,8 +136,8 @@ private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
   override def flatMap[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = {
     ResourceT(
       for {
-        releasableA <- unwrap(fa)
-        releasableB <- unwrap(f(releasableA.value))
+        releasableA <- opacityTypes.fromResourceT(fa)
+        releasableB <- opacityTypes.fromResourceT(f(releasableA.value))
       } yield {
         val b = releasableB.value
         val releaseB = releasableB.release
@@ -151,7 +159,7 @@ private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
   *
   * Usage:
   * {{{
-  * import com.thoughtworks.raii.covariant._
+  * import com.thoughtworks.zerocost.resourcet.covariant._
   * }}}
   */
 object covariant extends CovariantResourceTInstances0 {
@@ -162,21 +170,21 @@ object covariant extends CovariantResourceTInstances0 {
       applicative.pure(callByNameUnit)
     }
   }
-
-  /** A cache of `=> Unit`.
-    *
-    * @note When using this cache to create two `UnitContinuation[UnitContinuation]`s,
-    *       {{{
-    *       import com.thoughtworks.continuation._
-    *       val continuation1 = covariant.callByNameUnitCache.pure[UnitContinuation]
-    *       val continuation2 = covariant.callByNameUnitCache.pure[UnitContinuation]
-    *       }}}
-    *       then the two continuations should equal to each other.
-    *
-    *       {{{
-    *       continuation1 should be(continuation2)
-    *       }}}
-    */
+// Disabled util com.thoughtworks.zerocost.continuation has been ported.
+//  /** A cache of `=> Unit`.
+//    *
+//    * @note When using this cache to create two `UnitContinuation[UnitContinuation]`s,
+//    *       {{{
+//    *       import com.thoughtworks.continuation._
+//    *       val continuation1 = covariant.callByNameUnitCache.pure[UnitContinuation]
+//    *       val continuation2 = covariant.callByNameUnitCache.pure[UnitContinuation]
+//    *       }}}
+//    *       then the two continuations should equal to each other.
+//    *
+//    *       {{{
+//    *       continuation1 should be(continuation2)
+//    *       }}}
+//    */
   private[thoughtworks] val callByNameUnitCache = new CallByNameUnitCache(())
 
   private[thoughtworks] def appendMonadicUnit[F[+ _]: Monad](f0: F[Unit], f1: F[Unit]): F[Unit] = {
@@ -198,56 +206,60 @@ object covariant extends CovariantResourceTInstances0 {
   val opacityTypes: OpacityTypes = new Serializable with OpacityTypes {
     override type ResourceT[F[+ _], +A] = F[Resource[F, A]]
 
-    override def apply[F[+ _], A](run: F[Resource[F, A]]): ResourceT[F, A] = run
+    override def toResourceT[F[+ _], A](run: F[Resource[F, A]]): ResourceT[F, A] = run
 
-    override def unwrap[F[+ _], A](resourceT: ResourceT[F, A]): F[Resource[F, A]] =
-      resourceT
+    override def fromResourceT[F[+ _], A](resourceT: ResourceT[F, A]): F[Resource[F, A]] = resourceT
   }
 
   /** The data structure that provides automatic resource management.
     *
-    * @example `ResourceT` can be used as a monad transformer for [[scalaz.Name]]
+    * @example `ResourceT` can be used as a monad transformer for [[scala.Function0]]
     *
     *          {{{
-    *          import scalaz.Name
-    *          import com.thoughtworks.raii.covariant._
-    *          type RAII[A] = ResourceT[Name, A]
+    *          import scala.Function0
+    *          import cats.instances.function._
+    *          import com.thoughtworks.zerocost.resourcet.covariant._
+    *          type RAII[A] = ResourceT[Function0, A]
     *          }}}
     *
     *          Given a resource that creates temporary files
     *
     *          {{{
-    *          import java.io.File
-    *          val resource: RAII[File] = ResourceT(Name(new Serializable with Resource[Name, File] {
-    *            override val value: File = File.createTempFile("test", ".tmp");
-    *            override val release: Name[Unit] = Name {
-    *              val isDeleted = value.delete()
-    *            }
-    *          }))
+    *          trait MyResource extends AutoCloseable {
+    *            def inUse(): Unit
+    *          }
+    *          val myResourceStub0 = stub[MyResource]
+    *          val myResourceStub1 = stub[MyResource]
+    *          val myResourceFactoryMock = mockFunction[MyResource]
+    *          myResourceFactoryMock.expects().returns(myResourceStub0)
+    *          myResourceFactoryMock.expects().returns(myResourceStub1)
+    *          val resource: RAII[MyResource] = ResourceT.autoCloseable[Function0, MyResource](myResourceFactoryMock)
     *          }}}
     *
     *          when using temporary file created by `resouce` in a  `for` / `yield` block,
     *          those temporary files should be available.
     *
     *          {{{
-    *          import scalaz.syntax.all._
+    *          import cats.syntax.all._
     *          val usingResouce = for {
+    *            tmpFile0 <- resource
     *            tmpFile1 <- resource
-    *            tmpFile2 <- resource
     *          } yield {
-    *            tmpFile1 shouldNot be(tmpFile2)
-    *            tmpFile1 should exist
-    *            tmpFile2 should exist
-    *            (tmpFile1, tmpFile2)
+    *            tmpFile0 should be(myResourceStub0)
+    *            tmpFile1 should be(myResourceStub1)
+    *            tmpFile1.inUse()
     *          }
     *          }}}
     *
     *          and those files should have been deleted after the `for` / `yield` block.
     *
     *          {{{
-    *          val (tmpFile1, tmpFile2) = usingResouce.run.value
-    *          tmpFile1 shouldNot exist
-    *          tmpFile2 shouldNot exist
+    *          usingResouce.run.apply()
+    *          ((myResourceStub0.inUse _): () => Unit).verify().never()
+    *          ((myResourceStub0.close _): () => Unit).verify().once()
+    *
+    *          ((myResourceStub1.inUse _): () => Unit).verify().repeated(30 to 40)
+    *          ((myResourceStub1.close _): () => Unit).verify().once()
     *          }}}
     *
     * @note This `ResourceT` type is an opacity alias to `F[Resource[F, A]]`.
@@ -296,7 +308,7 @@ object covariant extends CovariantResourceTInstances0 {
     }
 
     @inline
-    private[thoughtworks] def now[F[+ _]: Applicative, A](value: A): Resource[F, A] = {
+    private[thoughtworks] def pure[F[+ _]: Applicative, A](value: A): Resource[F, A] = {
       Resource[F, A](value, callByNameUnitCache.pure[F])
     }
   }
@@ -304,9 +316,9 @@ object covariant extends CovariantResourceTInstances0 {
   private[thoughtworks] trait OpacityTypes {
     type ResourceT[F[+ _], +A]
 
-    private[thoughtworks] def apply[F[+ _], A](run: F[Resource[F, A]]): ResourceT[F, A]
+    private[thoughtworks] def toResourceT[F[+ _], A](run: F[Resource[F, A]]): ResourceT[F, A]
 
-    private[thoughtworks] def unwrap[F[+ _], A](resourceT: ResourceT[F, A]): F[Resource[F, A]]
+    private[thoughtworks] def fromResourceT[F[+ _], A](resourceT: ResourceT[F, A]): F[Resource[F, A]]
 
   }
 
@@ -328,21 +340,27 @@ object covariant extends CovariantResourceTInstances0 {
     */
   object ResourceT {
 
-    def delay[F[+ _]: Applicative, A](a: => A): ResourceT[F, A] =
-      ResourceT(Applicative[F].pure(Resource.now(a)))
+    def pure[F[+ _]: Applicative, A](a: A): ResourceT[F, A] =
+      ResourceT[F, A](Applicative[F].pure(Resource.pure(a)))
 
-    def garbageCollected[F[+ _]: Applicative, A](fa: F[A]): ResourceT[F, A] = {
-      ResourceT(fa.map(Resource.now[F, A](_)))
+    def liftIO[F[+ _]: Applicative: LiftIO, A](io: LiftIO.IO[A]): ResourceT[F, A] = {
+      ResourceT(LiftIO[F].liftIO(() => Resource.pure(io())))
     }
 
-    def nested[F[+ _]: Monad, A](fa: ResourceT[F, A]): ResourceT[F, A] = {
+    def delay[F[+ _]: Applicative: LiftIO, A](a: => A): ResourceT[F, A] = liftIO(a _)
+
+    def garbageCollected[F[+ _]: Applicative: LiftIO, A](fa: F[A]): ResourceT[F, A] = {
+      ResourceT(fa.map(Resource.pure[F, A](_)))
+    }
+
+    def nested[F[+ _]: Monad: LiftIO, A](fa: ResourceT[F, A]): ResourceT[F, A] = {
       garbageCollected(fa.run)
     }
 
-    def apply[F[+ _], A](run: F[Resource[F, A]]): ResourceT[F, A] = ResourceT(run)
+    def apply[F[+ _], A](run: F[Resource[F, A]]): ResourceT[F, A] = opacityTypes.toResourceT(run)
 
     def unapply[F[+ _], A](resourceT: ResourceT[F, A]): Some[F[Resource[F, A]]] =
-      Some(unwrap(resourceT))
+      Some(opacityTypes.fromResourceT(resourceT))
 
     def monadicCloseable[F[+ _]: Functor, A <: MonadicCloseable[F]](run: F[A]): ResourceT[F, A] = {
       val resource: F[Resource[F, A]] = run.map { a: A =>
@@ -351,9 +369,9 @@ object covariant extends CovariantResourceTInstances0 {
       ResourceT(resource)
     }
 
-    def autoCloseable[F[+ _]: Applicative, A <: AutoCloseable](run: F[A]): ResourceT[F, A] = {
+    def autoCloseable[F[+ _]: Functor: LiftIO, A <: AutoCloseable](run: F[A]): ResourceT[F, A] = {
       val resource: F[Resource[F, A]] = run.map { a: A =>
-        Resource(a, callByNameUnitCache.pure[F].map { _: Unit =>
+        Resource(a, LiftIO[F].delay {
           a.close()
         })
       }
@@ -384,7 +402,7 @@ object covariant extends CovariantResourceTInstances0 {
       *  - Returning `A`
       */
     def run(implicit monad: FlatMap[F]): F[A] = {
-      unwrap(resourceT).flatMap { resource: Resource[F, A] =>
+      opacityTypes.fromResourceT(resourceT).flatMap { resource: Resource[F, A] =>
         val value = resource.value
         resource.release.map { _ =>
           value
@@ -402,7 +420,7 @@ object covariant extends CovariantResourceTInstances0 {
       */
     def intransitiveMap[B](f: A => B)(implicit monad: Monad[F]): ResourceT[F, B] = {
       ResourceT(
-        unwrap(resourceT).flatMap { releasableA =>
+        opacityTypes.fromResourceT(resourceT).flatMap { releasableA =>
           val b = f(releasableA.value)
           releasableA.release.map { _ =>
             new Serializable with Resource[F, B] {
@@ -428,8 +446,8 @@ object covariant extends CovariantResourceTInstances0 {
     def intransitiveFlatMap[B](f: A => ResourceT[F, B])(implicit flatMap: FlatMap[F]): ResourceT[F, B] = {
       ResourceT(
         for {
-          releasableA <- unwrap(resourceT)
-          releasableB <- unwrap(f(releasableA.value))
+          releasableA <- opacityTypes.fromResourceT(resourceT)
+          releasableB <- opacityTypes.fromResourceT(f(releasableA.value))
           _ <- releasableA.release
         } yield releasableB
       )
