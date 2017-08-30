@@ -23,8 +23,10 @@ object covariant extends Serializable {
 
     type TryT[F[+ _], +A] = F[Try[A]]
 
+    @inline
     override final def toTryT[F[+ _], A](tryT: F[Try[A]]): TryT[F, A] = tryT
 
+    @inline
     override final def fromTryT[F[+ _], A](tryT: TryT[F, A]): F[Try[A]] = tryT
 
   }
