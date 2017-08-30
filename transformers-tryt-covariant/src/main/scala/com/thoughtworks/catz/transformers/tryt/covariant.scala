@@ -88,31 +88,6 @@ object covariant extends Serializable {
     }
   }
 
-//
-//  private[tryt] trait TryTBindRec[F[+ _]] extends BindRec[TryT[F, ?]] with TryTBind[F] {
-//    implicit protected def F: Monad[F]
-//    implicit protected def B: BindRec[F]
-//
-//    override def tailrecM[A, B](f: A => TryT[F, A Either B])(a: A): TryT[F, B] = {
-//
-//      val fTryB: F[Try[B]] = B.tailrecM[A, Try[B]](a =>
-//        Try(f(a)) match {
-//          case Success(tryT) =>
-//            F.map(opacityTypes.fromTryT(tryT)) {
-//              case Failure(e) =>
-//                Success (Failure(e))
-//              case Success(Success (b)) =>
-//                Success (Success(b))
-//              case Success(left @ Failure (_)) =>
-//                left
-//            }
-//          case Failure(e) =>
-//            F.pure(Success (Failure(e)))
-//      })(a)
-//      TryT(fTryB)
-//    }
-//  }
-
   private[tryt] trait TryTMonadError[F[+ _]] extends MonadError[TryT[F, `+?`], Throwable] with TryTFunctor[F] {
     implicit protected override def F: Monad[F]
 
