@@ -23,6 +23,7 @@ private[tryt] sealed abstract class CovariantTryTInstances3 { this: covariant.ty
 
 private[tryt] sealed abstract class CovariantTryTInstances2 extends CovariantTryTInstances3 { this: covariant.type =>
 
+  /** @group Type classes */
   implicit final def covariantTryTParallelLiftIO[F[+ _]](
       implicit F0: LiftIO[Parallel[F, ?]]): LiftIO[Parallel[TryT[F, `+?`], ?]] =
     Parallel.liftTypeClass[LiftIO, TryT[F, `+?`]](new TryTLiftIO[F] {
@@ -51,6 +52,7 @@ private[tryt] sealed abstract class CovariantTryTInstances1 extends CovariantTry
 
 private[tryt] sealed abstract class CovariantTryTInstances0 extends CovariantTryTInstances1 { this: covariant.type =>
 
+  /** @group Type classes */
   implicit final def covariantTryTLiftIO[F[+ _]](implicit F0: LiftIO[F]): LiftIO[TryT[F, ?]] =
     new TryTLiftIO[F] {
       implicit override def F: LiftIO[F] = F0
