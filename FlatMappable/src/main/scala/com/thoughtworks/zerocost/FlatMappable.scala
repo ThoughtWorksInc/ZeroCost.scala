@@ -1,11 +1,20 @@
 package com.thoughtworks.zerocost
 
 import cats.Monad
+import com.thoughtworks.zerocost.FlatMappable.TailCall
 
 import scala.annotation.tailrec
 
 trait FlatMappable[A] {
   def flatMap[B](f: A => FlatMappable[B]): FlatMappable[B]
+
+  /** Stack-safe flatMap */
+  def safeFlatMap[B](f: (A) => FlatMappable[B]): FlatMappable[B] = {
+    flatMap { a =>
+      (() => f(a)): TailCall[B]
+    }
+  }
+
 }
 
 object FlatMappable {
