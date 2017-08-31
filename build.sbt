@@ -2,7 +2,7 @@ lazy val LiftIO = project
 
 lazy val `parallel-covariant` = project
 
-lazy val continuation = project.dependsOn(`parallel-covariant`)
+lazy val continuation = project.dependsOn(`parallel-covariant`, LiftIO)
 
 lazy val `tryt-covariant` = project.dependsOn(`parallel-covariant`, LiftIO)
 

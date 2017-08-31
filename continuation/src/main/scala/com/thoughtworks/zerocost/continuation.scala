@@ -1,8 +1,11 @@
 package com.thoughtworks.zerocost
 
+import java.util.concurrent.atomic.AtomicReference
 import com.thoughtworks.zerocost.parallel.covariant._
 import scala.concurrent.{ExecutionContext, Future, Promise, SyncVar}
 import cats.{Applicative, Monad}
+import com.thoughtworks.zerocost.LiftIO.IO
+import scala.annotation.tailrec
 import scala.language.higherKinds
 import scala.language.existentials
 import scala.util.control.TailCalls
@@ -197,39 +200,6 @@ object continuation {
     */
   type ParallelContinuation[A] = Parallel[UnitContinuation, A]
 
-  /**
-    * @group Type class instances
-    */
-  implicit object continuationParallelApplicative extends Applicative[ParallelContinuation] with Serializable {
-    override val unit = super.unit
-
-    override def pure[A](x: A): ParallelContinuation[A] = {
-      Parallel(continuationMonad.pure(x))
-    }
-    override def ap[A, B](ff: ParallelContinuation[(A) => B])(fa: ParallelContinuation[A]): ParallelContinuation[B] = {
-      val ffBox: SyncVar[(A) => B] = new SyncVar
-      val faBox: SyncVar[A] = new SyncVar
-      val ffWorker: UnitContinuation[Unit] = {
-        val Parallel(ffCont) = ff
-        continuationMonad.map(ffCont) { ffResult =>
-          ffBox.put(ffResult)
-        }
-      }
-      val faWorker: UnitContinuation[Unit] = {
-        val Parallel(faCont) = fa
-        continuationMonad.map(faCont) { faResult =>
-          faBox.put(faResult)
-        }
-      }
-      val resultCont: UnitContinuation[B] = UnitContinuation.delay {
-        val ffResult = ffBox.take
-        val faResult = faBox.take
-        ffResult(faResult)
-      }
-      Parallel(continuationMonad.followedBy(continuationMonad.followedBy(ffWorker)(faWorker))(resultCont))
-    }
-  }
-
   object UnitContinuation {
 
     /** Returns a [[UnitContinuation]] of a blocking operation that will run on `executionContext`. */
@@ -317,7 +287,10 @@ object continuation {
 
     /** Returns a [[Continuation]] of a blocking operation */
     @inline
-    def delay[R, A](block: => A): Continuation[R, A] = safeAsync(Delay(block _))
+    def delay[R, A](block: => A): Continuation[R, A] = liftIO(block _)
+
+    @inline
+    def liftIO[R, A](io: IO[A]): Continuation[R, A] = safeAsync(Delay(io))
 
     @inline
     private[thoughtworks] def safeOnComplete[R, A](continuation: Continuation[R, A])(
@@ -404,15 +377,119 @@ object continuation {
 
   }
 
+  private class ContinuationMonad[R] extends Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] {
+    override val unit = super.unit
+
+    override def pure[A](x: A): Continuation[R, A] = Continuation.pure(x)
+
+    override def flatMap[A, B](fa: Continuation[R, A])(f: (A) => Continuation[R, B]): Continuation[R, B] =
+      Continuation.safeAsync(Bind(fa, f))
+
+    override def tailRecM[A, B](a: A)(f: (A) => Continuation[R, Either[A, B]]): Continuation[R, B] =
+      Continuation.safeAsync(TailrecM(f, a))
+
+    override def liftIO[A](io: IO[A]) = Continuation.liftIO(io)
+  }
+
   /**
     * @group Type class instances
     */
-  implicit def continuationMonad[R]: Monad[Continuation[R, +?]] = new Monad[Continuation[R, +?]] with Serializable {
-    override val unit = super.unit
-    override def pure[A](x: A): Continuation[R, A] = Continuation.pure(x)
-    override def flatMap[A, B](fa: Continuation[R, A])(f: (A) => Continuation[R, B]): Continuation[R, B] =
-      Continuation.safeAsync(Bind(fa, f))
-    override def tailRecM[A, B](a: A)(f: (A) => Continuation[R, Either[A, B]]): Continuation[R, B] =
-      Continuation.safeAsync(TailrecM(f, a))
-  }
+  implicit def continuationMonad[R]: Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] =
+    new ContinuationMonad[R]
+
+  /**
+    * @group Type class instances
+    */
+  implicit val continuationParallelApplicative: Monad[ParallelContinuation] with LiftIO[ParallelContinuation] =
+    Parallel.liftTypeClass[Lambda[F[_] => Monad[F] with LiftIO[F]], UnitContinuation](new ContinuationMonad[Unit] {
+
+      //    override def ap[A, B](ff: ParallelContinuation[(A) => B])(fa: ParallelContinuation[A]): ParallelContinuation[B] = {
+      //      val ffBox: SyncVar[(A) => B] = new SyncVar
+      //      val faBox: SyncVar[A] = new SyncVar
+      //      val ffWorker: UnitContinuation[Unit] = {
+      //        val Parallel(ffCont) = ff
+      //        continuationMonad.map(ffCont) { ffResult =>
+      //          ffBox.put(ffResult)
+      //        }
+      //      }
+      //      val faWorker: UnitContinuation[Unit] = {
+      //        val Parallel(faCont) = fa
+      //        continuationMonad.map(faCont) { faResult =>
+      //          faBox.put(faResult)
+      //        }
+      //      }
+      //      val resultCont: UnitContinuation[B] = UnitContinuation.delay {
+      //        val ffResult = ffBox.take
+      //        val faResult = faBox.take
+      //        ffResult(faResult)
+      //      }
+      //      Parallel(continuationMonad.followedBy(continuationMonad.followedBy(ffWorker)(faWorker))(resultCont))
+      //    }
+      override def tuple2[A, B](fa: UnitContinuation[A], fb: UnitContinuation[B]): UnitContinuation[(A, B)] = {
+        product(fa, fb)
+      }
+
+      override def product[A, B](fa: UnitContinuation[A], fb: UnitContinuation[B]): UnitContinuation[(A, B)] = {
+        import ParallelZipState._
+
+        val continuation: Continuation[Unit, (A, B)] = Continuation.safeAsync {
+          (continue: ((A, B)) => TailRec[Unit]) =>
+            def listenA(state: AtomicReference[ParallelZipState[A, B]]): TailRec[Unit] = {
+              @tailrec
+              def continueA(state: AtomicReference[ParallelZipState[A, B]], a: A): TailRec[Unit] = {
+                state.get() match {
+                  case oldState @ GotNeither() =>
+                    if (state.compareAndSet(oldState, GotA(a))) {
+                      TailCalls.done(())
+                    } else {
+                      continueA(state, a)
+                    }
+                  case GotA(_) =>
+                    val forkState = new AtomicReference[ParallelZipState[A, B]](GotA(a))
+                    listenB(forkState)
+                  case GotB(b) =>
+                    suspendTailRec {
+                      continue((a, b))
+                    }
+                }
+              }
+              Continuation.safeOnComplete(fa)(continueA(state, _))
+            }
+            def listenB(state: AtomicReference[ParallelZipState[A, B]]): TailRec[Unit] = {
+              @tailrec
+              def continueB(state: AtomicReference[ParallelZipState[A, B]], b: B): TailRec[Unit] = {
+                state.get() match {
+                  case oldState @ GotNeither() =>
+                    if (state.compareAndSet(oldState, GotB(b))) {
+                      TailCalls.done(())
+                    } else {
+                      continueB(state, b)
+                    }
+                  case GotB(_) =>
+                    val forkState = new AtomicReference[ParallelZipState[A, B]](GotB(b))
+                    listenA(forkState)
+                  case GotA(a) =>
+                    suspendTailRec {
+                      continue((a, b))
+                    }
+                }
+              }
+              Continuation.safeOnComplete(fb)(continueB(state, _))
+            }
+            val state = new AtomicReference[ParallelZipState[A, B]](GotNeither())
+
+            listenA(state).flatMap { _: Unit =>
+              listenB(state)
+            }
+        }
+        continuation
+      }
+
+      override def ap[A, B](ff: Continuation[Unit, (A) => B])(fa: Continuation[Unit, A]) = {
+        continuationMonad.map[(A, A => B), B](tuple2(fa, ff)) { pair: (A, A => B) =>
+          pair._2(pair._1)
+        }
+      }
+
+    })
 }
