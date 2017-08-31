@@ -380,7 +380,6 @@ object continuation {
   }
 
   private[zerocost] class ContinuationMonad[R] extends Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] {
-    override val unit = super.unit
 
     override def pure[A](x: A): Continuation[R, A] = Continuation.pure(x)
 
@@ -400,6 +399,17 @@ object continuation {
 
   /**
     * @group Type class instances
+    * @note When creating two no-op [[Continuation]]s from `continuationInstances.unit`,
+    *       {{{
+    *       import com.thoughtworks.zerocost.continuation._
+    *       import cats.Applicative
+    *       val noop0 = Applicative[UnitContinuation].unit
+    *       val noop1 = Applicative[UnitContinuation].unit
+    *       }}}
+    *       then the two no-op should equal to each other.
+    *       {{{
+    *       noop0 should be(noop1)
+    *       }}}
     */
   implicit def continuationInstances[R]: Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] =
     new ContinuationMonad[R]
