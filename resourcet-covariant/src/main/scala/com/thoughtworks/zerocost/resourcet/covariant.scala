@@ -105,6 +105,23 @@ private[thoughtworks] trait CovariantResourceTParallelApply[F[+ _]]
     with Apply[ResourceT[F, ?]] {
   private[thoughtworks] implicit def F: Apply[F]
 
+  override def product[A, B](pf: ResourceT[F, A], pfa: ResourceT[F, B]): ResourceT[F, (A, B)] = {
+    // FIXME: improve naming
+    val ResourceT(fa) = pfa
+    val ResourceT(f) = pf
+    val fResourceB = F.map2(fa, f) { (resourceA, resourceF) =>
+      val valueB = (resourceF.value, resourceA.value)
+      val releaseA = resourceA.release
+      val releaseF = resourceF.release
+      val release = F.map2(releaseA, releaseF) { (_: Unit, _: Unit) =>
+        ()
+      }
+      Resource(value = valueB, release = release)
+
+    }
+    ResourceT(fResourceB)
+  }
+
   override def ap[A, B](pf: ResourceT[F, A => B])(pfa: ResourceT[F, A]): ResourceT[F, B] = {
     val ResourceT(fa) = pfa
     val ResourceT(f) = pf
