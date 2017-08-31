@@ -31,13 +31,12 @@ import scala.util.control.TailCalls.TailRec
 object raii {
 
   private def fromContinuation[A](future: UnitContinuation[Resource[UnitContinuation, Try[A]]]): Raii[A] = {
-    opacityTypes.fromTryT(TryT[RaiiContinuation, A](ResourceT(future)))
+    Raii(TryT[RaiiContinuation, A](ResourceT(future)))
   }
 
   private def toContinuation[A](doValue: Raii[A]): UnitContinuation[Resource[UnitContinuation, Try[A]]] = {
-    val ResourceT(TryT(future)) = opacityTypes.toTryT(doValue)
-    //future
-    ???
+    val Raii(TryT(ResourceT(future))) = doValue
+    future
   }
 
   /** @template */
