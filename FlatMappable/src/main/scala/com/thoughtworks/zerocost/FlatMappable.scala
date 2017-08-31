@@ -27,7 +27,7 @@ object FlatMappable {
       }
     }
 
-    override def flatMap[B](f: A => FlatMappable[B]): FlatMappable[B] = {
+    override final def flatMap[B](f: A => FlatMappable[B]): FlatMappable[B] = {
       run.flatMap { b =>
         (() => f(b)): TailCall[B]
       }
@@ -53,6 +53,25 @@ object FlatMappable {
     }
 
     override def pure[A](a: A): FlatMappable[A] = Pure(a)
+  }
+
+  trait Async[A] extends FlatMappable[A] { outer =>
+    def onComplete(continueA: (A => Unit)): Unit
+    override final def flatMap[B](fab: (A) => FlatMappable[B]): FlatMappable[B] = {
+      new Async[B] {
+        override def onComplete(continueB: (B) => Unit): Unit = {
+          outer.onComplete { a =>
+            fab(a) match {
+              case async: Async[B] =>
+                async.onComplete { b =>
+                  continueB(b)
+                }
+              // TODO: Other FlatMappable
+            }
+          }
+        }
+      }
+    }
   }
 
 }
