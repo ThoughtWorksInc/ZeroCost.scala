@@ -29,6 +29,10 @@ object FlatMappable {
     }
   }
 
+  final case class Pure[A](a: A) extends FlatMappable[A] {
+    override def flatMap[B](f: (A) => FlatMappable[B]): FlatMappable[B] = f(a)
+  }
+
   implicit object flatMappableInstances extends Monad[FlatMappable] {
     override def flatMap[A, B](fa: FlatMappable[A])(f: (A) => FlatMappable[B]): FlatMappable[B] = fa.flatMap(f)
 
@@ -39,12 +43,9 @@ object FlatMappable {
         case Right(break) =>
           pure(break)
       }
-
     }
 
-    override def pure[A](a: A): FlatMappable[A] = new FlatMappable[A] {
-      override def flatMap[B](f: (A) => FlatMappable[B]): FlatMappable[B] = f(a)
-    }
+    override def pure[A](a: A): FlatMappable[A] = Pure(a)
   }
 
 }
