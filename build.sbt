@@ -10,7 +10,7 @@ lazy val task = project.dependsOn(continuation, tryt, MultipleException)
 
 lazy val resourcet = project.dependsOn(parallel, LiftIO)
 
-lazy val raii = project.dependsOn(resourcet, task)
+lazy val raii = project.dependsOn(resourcet, parallel, task)
 
 lazy val MultipleException = project
 

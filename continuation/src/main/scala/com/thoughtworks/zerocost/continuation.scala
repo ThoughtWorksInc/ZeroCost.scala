@@ -62,7 +62,7 @@ object continuation {
     * @see [[UnitContinuationOps]] for extension methods for this `UnitContinuationOps`.
     * @see [[ParallelContinuation]] for parallel version of this `UnitContinuation`.
     * @note This `UnitContinuation` type does not support exception handling.
-    * @see [[com.thoughtworks.zerocost.future.Future Future]] for asynchronous task that supports exception handling.
+    * @see [[com.thoughtworks.zerocost.task.Task Task]] for asynchronous task that supports exception handling.
     * @template
     */
   type UnitContinuation[+A] = Continuation[Unit, A]

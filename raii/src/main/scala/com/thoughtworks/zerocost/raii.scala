@@ -2,35 +2,34 @@ package com.thoughtworks.zerocost
 
 import java.util.concurrent.atomic.AtomicReference
 
-import com.thoughtworks.zerocost.tryt.{TryT, TryTLiftIO, TryTMonadError, TryTParallelApply}
+import com.thoughtworks.zerocost.tryt._
 
 import scala.concurrent.ExecutionContext
 import scala.language.higherKinds
 import scala.util.{Failure, Success, Try}
-import TryT._
 import cats.{Applicative, Monad, MonadError, Semigroup}
 import com.thoughtworks.zerocost.task._
 import com.thoughtworks.zerocost.continuation.{UnitContinuation, _}
 import com.thoughtworks.zerocost.resourcet._
-import parallel._
+import com.thoughtworks.zerocost.parallel._
 
 import scala.util.control.NonFatal
 import cats.syntax.all._
 
 import scala.util.control.TailCalls.TailRec
 
-/** The namespace that contains [[raii.Raii]].
+/** The namespace that contains [[Raii]].
   *
   * @author 杨博 (Yang Bo) &lt;pop.atry@gmail.com&gt;
   */
 object raii {
 
   private def fromContinuation[A](future: UnitContinuation[Resource[UnitContinuation, Try[A]]]): Raii[A] = {
-    Raii(TryT[RaiiContinuation, A](ResourceT(future)))
+    Raii(Parallel(TryT[RaiiContinuation, A](ResourceT(future))))
   }
 
   private def toContinuation[A](doValue: Raii[A]): UnitContinuation[Resource[UnitContinuation, Try[A]]] = {
-    val Raii(TryT(ResourceT(future))) = doValue
+    val Raii(Parallel(TryT(ResourceT(future)))) = doValue
     future
   }
 
@@ -39,28 +38,12 @@ object raii {
 
   private[raii] trait OpacityTypes {
     type Raii[+A]
-    type ParallelRaii[+A] = Parallel[Raii, A]
 
-    private[raii] def fromTryT[A](run: TryT[RaiiContinuation, A]): Raii[A]
+    private[raii] def fromTryT[A](parallelTryT: Parallel[TryT[RaiiContinuation, +?], A]): Raii[A]
 
-    private[raii] def toTryT[A](doValue: Raii[A]): TryT[RaiiContinuation, A]
+    private[raii] def toTryT[A](raii: Raii[A]): Parallel[TryT[RaiiContinuation, +?], A]
 
-    implicit private[raii] def raiiMonadErrorInstances: MonadError[Raii, Throwable] with LiftIO[Raii]
-
-    implicit private[raii] def parallelRaiiMonadErrorInstances
-      : MonadError[ParallelRaii, Throwable] with LiftIO[ParallelRaii]
-  }
-
-  private val UnitContinuationInstances = continuationInstances[Unit]
-
-  private object RaiiContinuationInstances
-      extends ResourceTMonad[UnitContinuation]
-      with ResourceTLiftIO[UnitContinuation] {
-    override implicit def F = UnitContinuationInstances
-  }
-
-  private object RaiiInstances extends TryTMonadError[RaiiContinuation] with TryTLiftIO[RaiiContinuation] {
-    override implicit def F = RaiiContinuationInstances
+    implicit private[raii] def parallelRaiiMonadErrorInstances: MonadError[Raii, Throwable] with LiftIO[Raii]
   }
 
   private val ParallelContinuationInstances = parallelContinuationInstances
@@ -86,13 +69,12 @@ object raii {
     * @note For internal usage only.
     */
   val opacityTypes: OpacityTypes = new Serializable with OpacityTypes { outer =>
-    override type Raii[+A] = TryT[RaiiContinuation, A]
+    override type Raii[+A] = Parallel[TryT[RaiiContinuation, +?], A]
 
-    override private[raii] def fromTryT[A](run: TryT[RaiiContinuation, A]): TryT[RaiiContinuation, A] = run
+    override private[raii] def fromTryT[A](parallelTryT: Parallel[TryT[RaiiContinuation, +?], A]): Raii[A] =
+      parallelTryT
 
-    override private[raii] def toTryT[A](doa: TryT[RaiiContinuation, A]): TryT[RaiiContinuation, A] = doa
-
-    implicit private[raii] def raiiMonadErrorInstances: MonadError[Raii, Throwable] with LiftIO[Raii] = RaiiInstances
+    override private[raii] def toTryT[A](raii: Raii[A]): Parallel[TryT[RaiiContinuation, +?], A] = raii
 
     implicit private[raii] def parallelRaiiMonadErrorInstances
       : MonadError[Parallel[TryT[RaiiContinuation, +?], ?], Throwable] with LiftIO[
@@ -115,54 +97,17 @@ object raii {
     */
   type Raii[+A] = opacityTypes.Raii[A]
 
-  /** A [[Raii]] tagged as [[Parallel]].
-    *
-    * @example `ParallelRaii` and [[Raii]] can be converted to each other via [[Parallel]].
-    *
-    *          Given a [[Raii]],
-    *
-    *          {{{
-    *          import com.thoughtworks.zerocost.raii.{Raii, ParallelRaii}
-    *          import java.net._
-    *          import java.io._
-    *          val originalRaiiInput: Raii[InputStream] = Raii.autoCloseable(new URL("http://thoughtworks.com/").openStream())
-    *          }}}
-    *
-    *          when converting it to `ParallelRaii` and converting it back,
-    *
-    *          {{{
-    *          import com.thoughtworks.zerocost.parallel.Parallel
-    *          val parallelRaiiInput: ParallelRaii[InputStream] = Parallel(originalRaiiInput)
-    *          val Parallel(doInput) = parallelRaiiInput
-    *          }}}
-    *
-    *          then the [[Raii]] should be still the original instance.
-    *
-    *          {{{
-    *          doInput should be(originalRaiiInput)
-    *          }}}
-    *
-    * @see [[doParallelApplicative]] for the [[cats.Applicative Applicative]] type class for parallel computing.
-    *
-    * @template
-    */
-  type ParallelRaii[A] = Parallel[Raii, A]
-
   /** Returns an [[cats.Applicative Applicative]] type class for parallel computing.
     *
     * @note This type class requires a [[cats.Semigroup Semigroup]] to combine multiple `Throwable`s into one,
     *       in the case of multiple tasks report errors in parallel.
     * @group Type classes
     */
-  implicit def raiiMonadErrorInstances: MonadError[Raii, Throwable] =
-    opacityTypes.raiiMonadErrorInstances
-
-  /** @group Type classes */
-  implicit def parallelRaiiMonadErrorInstances: MonadError[ParallelRaii, Throwable] =
+  implicit def parallelRaiiMonadErrorInstances: MonadError[Raii, Throwable] =
     opacityTypes.parallelRaiiMonadErrorInstances
 
   /** The companion object of [[Raii]]
- *
+    *
     * @define pure             Converts a strict value to a `Raii` whose [[parallel.Resource.release release]] operation is no-op.
     * @define seenow           @see [[pure]] for strict garbage collected `Raii`
     * @define delay            Returns a non-strict `Raii` whose [[parallel.Resource.release release]] operation is no-op.
@@ -186,15 +131,15 @@ object raii {
             Resource(Failure(e), UnitContinuation.pure(()))
         }
       }
-      Raii(TryT(ResourceT(resourceContinuation)))
+      Raii(Parallel(TryT(ResourceT(resourceContinuation))))
     }
 
-    def apply[A](tryT: TryT[ResourceT[UnitContinuation, `+?`], A]): Raii[A] = {
-      opacityTypes.fromTryT(tryT)
+    def apply[A](parallelTryT: Parallel[TryT[ResourceT[UnitContinuation, +?], +?], A]): Raii[A] = {
+      opacityTypes.fromTryT(parallelTryT)
     }
 
-    def unapply[A](doValue: Raii[A]): Some[TryT[ResourceT[UnitContinuation, `+?`], A]] = {
-      Some(opacityTypes.toTryT(doValue))
+    def unapply[A](raii: Raii[A]): Some[Parallel[TryT[ResourceT[UnitContinuation, `+?`], +?], A]] = {
+      Some(opacityTypes.toTryT(raii))
     }
 
     /** $releasable
@@ -339,7 +284,7 @@ object raii {
       * $seeautocloseable
       */
     def delay[A](value: => A): Raii[A] = {
-      Raii(TryT(ResourceT.delay(Try(value))))
+      Raii(Parallel(TryT(ResourceT.delay(Try(value)))))
     }
 
     /** Returns a nested scope of `doA`.
@@ -352,8 +297,8 @@ object raii {
       * @see [[AsynchronousRaiiOps.run]] for running a `Raii` as a [[com.thoughtworks.future.Task ThoughtWorks Task]].
       */
     def nested[A](doA: Raii[A]): Raii[A] = {
-      val Raii(TryT(resourceT)) = doA
-      Raii(TryT(ResourceT.nested(resourceT)))
+      val Raii(Parallel(TryT(resourceT))) = doA
+      Raii(Parallel(TryT(ResourceT.nested(resourceT))))
     }
 
     /** $now
@@ -366,11 +311,11 @@ object raii {
     }
 
     def async[A](start: (Resource[UnitContinuation, Try[A]] => Unit) => Unit): Raii[A] = {
-      Raii(TryT(ResourceT(UnitContinuation.async(start))))
+      Raii(Parallel(TryT(ResourceT(UnitContinuation.async(start)))))
     }
 
     def safeAsync[A](start: (Resource[UnitContinuation, Try[A]] => TailRec[Unit]) => TailRec[Unit]): Raii[A] = {
-      Raii(TryT(ResourceT(UnitContinuation.safeAsync(start))))
+      Raii(Parallel(TryT(ResourceT(UnitContinuation.safeAsync(start)))))
     }
 
     def suspend[A](doValue: => Raii[A]): Raii[A] = {
@@ -392,7 +337,7 @@ object raii {
       *
       *       val mainThread = Thread.currentThread
       *
-      *       val doAssertion = for {
+      *       val assertionRaii = for {
       *         _ <- Raii.delay(())
       *         threadBeforeJump = Thread.currentThread
       *         _ = threadBeforeJump should be(mainThread)
@@ -401,7 +346,7 @@ object raii {
       *       } yield {
       *         threadAfterJump shouldNot be(mainThread)
       *       }
-      *       doAssertion.run.toFuture
+      *       assertionRaii.run.toFuture
       *       }}}
       *
       * $delay
@@ -418,12 +363,12 @@ object raii {
   implicit final class AsynchronousRaiiOps[A](asynchronousRaii: Raii[A]) {
 
     def onComplete(continue: Resource[UnitContinuation, Try[A]] => Unit) = {
-      val Raii(TryT(ResourceT(continuation))) = asynchronousRaii
+      val Raii(Parallel(TryT(ResourceT(continuation)))) = asynchronousRaii
       continuation.onComplete(continue)
     }
 
     def safeOnComplete(continue: Resource[UnitContinuation, Try[A]] => TailRec[Unit]) = {
-      val Raii(TryT(ResourceT(continuation))) = asynchronousRaii
+      val Raii(Parallel(TryT(ResourceT(continuation)))) = asynchronousRaii
       continuation.safeOnComplete(continue)
     }
 
