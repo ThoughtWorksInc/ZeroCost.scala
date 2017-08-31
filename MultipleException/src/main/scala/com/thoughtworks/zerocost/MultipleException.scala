@@ -5,7 +5,7 @@ import java.io.{PrintStream, PrintWriter}
 import cats.Semigroup
 
 object MultipleException {
-  object throwableSemigroup extends Semigroup[Throwable] {
+  implicit object throwableSemigroup extends Semigroup[Throwable] {
     override def combine(f1: Throwable, f2: Throwable): Throwable =
       f1 match {
         case MultipleException(exceptionSet1) =>

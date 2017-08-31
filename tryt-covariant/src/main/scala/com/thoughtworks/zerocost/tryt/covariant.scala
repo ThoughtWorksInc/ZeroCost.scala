@@ -13,8 +13,8 @@ private[tryt] sealed abstract class CovariantTryTInstances3 { this: covariant.ty
   /** @group Type classes */
   implicit final def covariantTryTParallelMonadError[F[+ _]](
       implicit F0: Monad[Parallel[F, ?]],
-      E0: Semigroup[Throwable]): MonadError[Parallel[TryT[F, `+?`], ?], Throwable] = {
-    Parallel.liftTypeClass[MonadError[?[_], Throwable], TryT[F, `+?`]](new TryTMonadError[F] with TryTParallelApply[F] {
+      E0: Semigroup[Throwable]): MonadError[Parallel[TryT[F, +?], ?], Throwable] = {
+    Parallel.liftTypeClass[MonadError[?[_], Throwable], TryT[F, +?]](new TryTMonadError[F] with TryTParallelApply[F] {
       override implicit def E: Semigroup[Throwable] = E0
       implicit override def F: Monad[F] = Parallel.unliftTypeClass(F0)
     })
@@ -25,15 +25,15 @@ private[tryt] sealed abstract class CovariantTryTInstances2 extends CovariantTry
 
   /** @group Type classes */
   implicit final def covariantTryTParallelLiftIO[F[+ _]](
-      implicit F0: LiftIO[Parallel[F, ?]]): LiftIO[Parallel[TryT[F, `+?`], ?]] =
-    Parallel.liftTypeClass[LiftIO, TryT[F, `+?`]](new TryTLiftIO[F] {
+      implicit F0: LiftIO[Parallel[F, ?]]): LiftIO[Parallel[TryT[F, +?], ?]] =
+    Parallel.liftTypeClass[LiftIO, TryT[F, +?]](new TryTLiftIO[F] {
       implicit override def F: LiftIO[F] = Parallel.unliftTypeClass(F0)
     })
 
   /** @group Type classes */
   implicit final def covariantTryTParallelApply[F[+ _]](implicit F0: Apply[Parallel[F, ?]],
-                                                        E0: Semigroup[Throwable]): Apply[Parallel[TryT[F, `+?`], ?]] = {
-    Parallel.liftTypeClass[Apply, TryT[F, `+?`]](new TryTParallelApply[F] {
+                                                        E0: Semigroup[Throwable]): Apply[Parallel[TryT[F, +?], ?]] = {
+    Parallel.liftTypeClass[Apply, TryT[F, +?]](new TryTParallelApply[F] {
       override implicit def E: Semigroup[Throwable] = E0
       implicit override def F: Apply[F] = Parallel.unliftTypeClass(F0)
     })
@@ -43,7 +43,7 @@ private[tryt] sealed abstract class CovariantTryTInstances2 extends CovariantTry
 private[tryt] sealed abstract class CovariantTryTInstances1 extends CovariantTryTInstances2 { this: covariant.type =>
 
   /** @group Type classes */
-  implicit final def covariantTryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, `+?`], Throwable] = {
+  implicit final def covariantTryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, +?], Throwable] = {
     new TryTMonadError[F] {
       implicit override def F: Monad[F] = F0
     }
@@ -102,7 +102,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
 
   import opacityTypes._
 
-  private[tryt] trait TryTLiftIO[F[+ _]] extends LiftIO[TryT[F, ?]] {
+  private[zerocost] trait TryTLiftIO[F[+ _]] extends LiftIO[TryT[F, ?]] {
     implicit protected def F: LiftIO[F]
 
     override def liftIO[A](io: IO[A]): TryT[F, A] = {
@@ -112,7 +112,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
     }
   }
 
-  private[tryt] trait TryTFunctor[F[+ _]] extends Functor[TryT[F, ?]] {
+  private[zerocost] trait TryTFunctor[F[+ _]] extends Functor[TryT[F, ?]] {
     implicit protected def F: Functor[F]
 
     override def map[A, B](fa: TryT[F, A])(f: A => B): TryT[F, B] = {
@@ -124,7 +124,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
     }
   }
 
-  private[tryt] trait TryTMonadError[F[+ _]] extends MonadError[TryT[F, `+?`], Throwable] with TryTFunctor[F] {
+  private[zerocost] trait TryTMonadError[F[+ _]] extends MonadError[TryT[F, +?], Throwable] with TryTFunctor[F] {
     implicit protected override def F: Monad[F]
 
     override def flatMap[A, B](fa: TryT[F, A])(f: A => TryT[F, B]): TryT[F, B] = TryT {
@@ -180,9 +180,44 @@ object covariant extends CovariantTryTInstances0 with Serializable {
 
   }
 
-  private[tryt] trait TryTParallelApply[F[+ _]] extends Apply[TryT[F, `+?`]] with TryTFunctor[F] {
+  private[zerocost] trait TryTParallelApply[F[+ _]] extends Apply[TryT[F, +?]] with TryTFunctor[F] {
     implicit protected def F: Apply[F]
     implicit protected def E: Semigroup[Throwable]
+
+    override def tuple2[A, B](fa: TryT[F, A], fb: TryT[F, B]): TryT[F, (A, B)] = {
+      product(fa, fb)
+    }
+
+    override def product[A, B](fa: TryT[F, A], fb: TryT[F, B]): TryT[F, (A, B)] = {
+
+      val TryT(fTryA) = fa
+      val TryT(fTryB) = fb
+
+      import cats.syntax.all._
+
+      val fTryAB: F[Try[(A, B)]] =
+        F.map2(fTryA, fTryB) { (tryA: Try[A], tryAB: Try[B]) =>
+          tryA match {
+            case Success(a) =>
+              tryAB match {
+                case Success(b) =>
+                  try {
+                    Success((a, b))
+                  } catch {
+                    case NonFatal(nonfatal) => Failure(nonfatal)
+                  }
+                case Failure(failure) => Failure(failure)
+              }
+            case Failure(failure) =>
+              tryAB match {
+                case Success(_) => Failure(failure)
+                case Failure(anotherFailure) =>
+                  Failure(failure |+| anotherFailure)
+              }
+          }
+        }
+      TryT(fTryAB)
+    }
 
     override def ap[A, B](f: TryT[F, A => B])(fa: TryT[F, A]): TryT[F, B] = {
 

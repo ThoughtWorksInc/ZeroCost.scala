@@ -17,7 +17,7 @@ import scala.util.control.TailCalls.TailRec
 object continuation {
 
   @inline
-  private def suspendTailRec[R](a: => TailRec[R]) = TailCalls.tailcall(TailCalls.done(a).result)
+  private def suspendTailRec[R](a: => TailRec[R]) = TailCalls.tailcall(a)
 
   private[continuation] trait OpacityTypes {
     type Continuation[R, +A]
@@ -141,7 +141,8 @@ object continuation {
     *          when map them together,
     *
     *          {{{
-    *          val result: ParallelContinuation[Int] = continuationParallelApplicative.map2(pc0, pc1)(_ + _)
+    *          import cats.syntax.all._
+    *          val result: ParallelContinuation[Int] = (pc0, pc1).mapN(_ + _)
     *          }}}
     *
     *          then the result should be a `ParallelContinuation` as well,
@@ -149,7 +150,7 @@ object continuation {
     *
     *          {{{
     *          val Parallel(contResult) = result
-    *          continuationMonad.map(contResult) {
+    *          contResult.map {
     *            _ should be(42)
     *          }.toScalaFuture
     *          }}}
@@ -175,7 +176,8 @@ object continuation {
     *          when map them together,
     *
     *          {{{
-    *          val result: ParallelContinuation[Unit] = continuationParallelApplicative.map2(pc0, pc1){ (u0: Unit, u1: Unit) => }
+    *          import cats.syntax.all._
+    *          val result: ParallelContinuation[Unit] = (pc0, pc1).mapN{ (u0: Unit, u1: Unit) => }
     *          }}}
     *
     *          then the two vars have not been modified right now,
@@ -190,7 +192,7 @@ object continuation {
     *
     *          {{{
     *          val Parallel(contResult) = result
-    *          continuationMonad.map(contResult) { _: Unit =>
+    *          contResult.map { _: Unit =>
     *            count0 should be(1)
     *            count1 should be(1)
     *          }.toScalaFuture
@@ -274,7 +276,9 @@ object continuation {
     }
 
     private final case class Pure[R, A](a: A) extends ((A => TailRec[R]) => TailRec[R]) {
-      override def apply(continue: (A) => TailRec[R]): TailRec[R] = continue(a)
+      override def apply(continue: (A) => TailRec[R]): TailRec[R] = suspendTailRec {
+        continue(a)
+      }
     }
 
     /** Returns a [[Continuation]] whose value is always `a`. */
@@ -377,7 +381,7 @@ object continuation {
 
   }
 
-  private class ContinuationMonad[R] extends Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] {
+  private[zerocost] class ContinuationMonad[R] extends Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] {
     override val unit = super.unit
 
     override def pure[A](x: A): Continuation[R, A] = Continuation.pure(x)
@@ -394,37 +398,15 @@ object continuation {
   /**
     * @group Type class instances
     */
-  implicit def continuationMonad[R]: Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] =
+  implicit def continuationInstances[R]: Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] =
     new ContinuationMonad[R]
 
   /**
     * @group Type class instances
     */
-  implicit val continuationParallelApplicative: Monad[ParallelContinuation] with LiftIO[ParallelContinuation] =
+  implicit val parallelContinuationInstances: Monad[ParallelContinuation] with LiftIO[ParallelContinuation] =
     Parallel.liftTypeClass[Lambda[F[_] => Monad[F] with LiftIO[F]], UnitContinuation](new ContinuationMonad[Unit] {
 
-      //    override def ap[A, B](ff: ParallelContinuation[(A) => B])(fa: ParallelContinuation[A]): ParallelContinuation[B] = {
-      //      val ffBox: SyncVar[(A) => B] = new SyncVar
-      //      val faBox: SyncVar[A] = new SyncVar
-      //      val ffWorker: UnitContinuation[Unit] = {
-      //        val Parallel(ffCont) = ff
-      //        continuationMonad.map(ffCont) { ffResult =>
-      //          ffBox.put(ffResult)
-      //        }
-      //      }
-      //      val faWorker: UnitContinuation[Unit] = {
-      //        val Parallel(faCont) = fa
-      //        continuationMonad.map(faCont) { faResult =>
-      //          faBox.put(faResult)
-      //        }
-      //      }
-      //      val resultCont: UnitContinuation[B] = UnitContinuation.delay {
-      //        val ffResult = ffBox.take
-      //        val faResult = faBox.take
-      //        ffResult(faResult)
-      //      }
-      //      Parallel(continuationMonad.followedBy(continuationMonad.followedBy(ffWorker)(faWorker))(resultCont))
-      //    }
       override def tuple2[A, B](fa: UnitContinuation[A], fb: UnitContinuation[B]): UnitContinuation[(A, B)] = {
         product(fa, fb)
       }
@@ -486,7 +468,7 @@ object continuation {
       }
 
       override def ap[A, B](ff: Continuation[Unit, (A) => B])(fa: Continuation[Unit, A]) = {
-        continuationMonad.map[(A, A => B), B](tuple2(fa, ff)) { pair: (A, A => B) =>
+        map[(A, A => B), B](tuple2(fa, ff)) { pair: (A, A => B) =>
           pair._2(pair._1)
         }
       }
