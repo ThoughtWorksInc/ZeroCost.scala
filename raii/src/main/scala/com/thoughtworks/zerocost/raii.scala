@@ -142,17 +142,14 @@ object raii {
       fromContinuation(
         continuation.map {
           case failure @ Failure(e) =>
-            new Serializable with Resource[UnitContinuation, Try[A]] {
-              override val value: Try[A] = Failure(e)
-              override def release: UnitContinuation[Unit] = {
+            Resource[UnitContinuation, Try[A]](
+              value = Failure(e),
+              release = {
                 UnitContinuation.pure(())
               }
-            }
+            )
           case success @ Success(releasable) =>
-            new Serializable with Resource[UnitContinuation, Try[A]] {
-              override val value = Success(releasable)
-              override def release: UnitContinuation[Unit] = releasable.monadicClose
-            }
+            Resource[UnitContinuation, Try[A]](value = Success(releasable), release = releasable.monadicClose)
         }
       )
     }
@@ -173,19 +170,17 @@ object raii {
       fromContinuation(
         continuation.map {
           case failure @ Failure(e) =>
-            new Serializable with Resource[UnitContinuation, Try[A]] {
-              override val value: Try[A] = failure
-              override val release: UnitContinuation[Unit] = {
-                UnitContinuation.pure(())
-              }
-            }
+            Resource[UnitContinuation, Try[A]](
+              value = failure,
+              release = UnitContinuation.pure(())
+            )
           case success @ Success(closeable) =>
-            new Serializable with Resource[UnitContinuation, Try[A]] {
-              override val value: Try[A] = success
-              override val release: UnitContinuation[Unit] = {
+            Resource[UnitContinuation, Try[A]](
+              value = success,
+              release = {
                 Continuation.delay(closeable.close())
               }
-            }
+            )
         }
       )
     }

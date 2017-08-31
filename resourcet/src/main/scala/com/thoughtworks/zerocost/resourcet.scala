@@ -169,13 +169,7 @@ object resourcet extends ResourceTInstances0 {
           val b = releasableB.value
           val releaseB = releasableB.release
           val releaseA = releasableA.release
-          new Serializable with Resource[F, B] {
-            override def value: B = b
-
-            override val release: F[Unit] = {
-              appendMonadicUnit(releaseB, releaseA)
-            }
-          }
+          Resource[F, B](value = b, release = appendMonadicUnit(releaseB, releaseA))
         }
       )
     }
@@ -269,39 +263,20 @@ object resourcet extends ResourceTInstances0 {
     * @note This [[Resource]] will become a case class. Use [[Resource.apply]] instead of `new Serializable with Resource[F, A] { ... }`.
     * @tparam A the type of [[value]]
     * @tparam F the monadic type of [[release]]
+    *
+    * @param release Releases [[value]] and all resource dependencies during creating [[value]].
+    *
+    * @note After [[release]], [[value]] should not be used if:
+    *       - [[value]] is a scoped native resource,
+    *         e.g. this [[Resource]] is created from [[com.thoughtworks.zerocost.raii.Raii.autoCloseable* autoCloseable]],
+    *       - or, [[value]] internally references some scoped native resources.
     */
-  trait Resource[F[+ _], +A] {
-    def value: A
-
-    /** Releases [[value]] and all resource dependencies during creating [[value]].
-      *
-      * @note After [[release]], [[value]] should not be used if:
-      *       - [[value]] is a scoped native resource,
-      *         e.g. this [[Resource]] is created from [[com.thoughtworks.zerocost.raii.Raii.autoCloseable* autoCloseable]],
-      *       - or, [[value]] internally references some scoped native resources.
-      */
-    def release: F[Unit]
-  }
+  final case class Resource[F[+ _], +A](value: A, release: F[Unit])
 
   @deprecated(message = "Use [[Resource]] instead.", since = "3.0.0")
   type Releasable[F[+ _], +A] = Resource[F, A]
 
   object Resource {
-
-    def unapply[F[+ _], A](resource: Resource[F, A]): Option[(A, F[Unit])] = Some((resource.value, resource.release))
-
-    def apply[F[+ _], A](value: A, release: F[Unit]): Resource[F, A] = {
-      val value0 = value
-      val release0 = release
-      new Serializable with Resource[F, A] {
-        def value: A = value0
-
-        def release: F[Unit] = release0
-
-        override def toString: String = raw"""Resource($value, $release)"""
-      }
-    }
-
     @inline
     private[thoughtworks] def pure[F[+ _], A](value: A)(implicit F: Applicative[F]): Resource[F, A] = {
       Resource[F, A](value, F.unit)
