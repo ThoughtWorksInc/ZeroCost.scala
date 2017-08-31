@@ -103,10 +103,10 @@ object raii {
   /** An universal monadic data type that consists of many useful monad transformers.
     *
     * == Features of `Raii` ==
-    *  - [[com.thoughtworks.tryt.TryT exception handling]]
-    *  - [[com.thoughtworks.raii.ResourceT automatic resource management]]
+    *  - [[com.thoughtworks.zerocost.tryt.TryT exception handling]]
+    *  - [[com.thoughtworks.zerocost.resourcet.ResourceT automatic resource management]]
     *  - [[raii.AsynchronousRaiiOps.shared reference counting]]
-    *  - [[com.thoughtworks.continuation.UnitContinuation raii programming]]
+    *  - [[com.thoughtworks.zerocost.continuation.UnitContinuation raii programming]]
     *  - [[ParallelRaii parallel computing]]
     *
     * @note This `Raii` type is an [[https://www.reddit.com/r/scala/comments/5qbdgq/value_types_without_anyval/dcxze9q/ opacity alias]] to `UnitContinuation[Resource[UnitContinuation, Try[A]]]`.
@@ -115,23 +115,23 @@ object raii {
     */
   type Raii[+A] = opacityTypes.Raii[A]
 
-  /** A [[Raii]] tagged as [[scalaz.Tags.Parallel Parallel]].
+  /** A [[Raii]] tagged as [[Parallel]].
     *
-    * @example `ParallelRaii` and [[Raii]] can be converted to each other via [[scalaz.Tags.Parallel]].
+    * @example `ParallelRaii` and [[Raii]] can be converted to each other via [[Parallel]].
     *
     *          Given a [[Raii]],
     *
     *          {{{
-    *          import com.thoughtworks.raii.raii.{Raii, ParallelRaii}
+    *          import com.thoughtworks.zerocost.raii.{Raii, ParallelRaii}
     *          import java.net._
     *          import java.io._
-    *          val originalRaiiInput: Raii[InputStream] = Raii.autoCloseable(new Serializable with URL("http://thoughtworks.com/").openStream())
+    *          val originalRaiiInput: Raii[InputStream] = Raii.autoCloseable(new URL("http://thoughtworks.com/").openStream())
     *          }}}
     *
     *          when converting it to `ParallelRaii` and converting it back,
     *
     *          {{{
-    *          import scalaz.Tags.Parallel
+    *          import com.thoughtworks.zerocost.parallel.Parallel
     *          val parallelRaiiInput: ParallelRaii[InputStream] = Parallel(originalRaiiInput)
     *          val Parallel(doInput) = parallelRaiiInput
     *          }}}
@@ -142,15 +142,15 @@ object raii {
     *          doInput should be(originalRaiiInput)
     *          }}}
     *
-    * @see [[doParallelApplicative]] for the [[scalaz.Applicative Applicative]] type class for parallel computing.
+    * @see [[doParallelApplicative]] for the [[cats.Applicative Applicative]] type class for parallel computing.
     *
     * @template
     */
   type ParallelRaii[A] = Parallel[Raii, A]
 
-  /** Returns an [[scalaz.Applicative Applicative]] type class for parallel computing.
+  /** Returns an [[cats.Applicative Applicative]] type class for parallel computing.
     *
-    * @note This type class requires a [[scalaz.Semigroup Semigroup]] to combine multiple `Throwable`s into one,
+    * @note This type class requires a [[cats.Semigroup Semigroup]] to combine multiple `Throwable`s into one,
     *       in the case of multiple tasks report errors in parallel.
     * @group Type classes
     */
@@ -384,8 +384,9 @@ object raii {
       *       {{{
       *       import java.util.concurrent._
       *       import scala.concurrent._
-      *       import scalaz.syntax.all._
-      *       import com.thoughtworks.raii.raii._
+      *       import cats.syntax.all._
+      *       import com.thoughtworks.zerocost.task._
+      *       import com.thoughtworks.zerocost.raii._
       *
       *       implicit def executorContext = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
       *
@@ -400,7 +401,7 @@ object raii {
       *       } yield {
       *         threadAfterJump shouldNot be(mainThread)
       *       }
-      *       doAssertion.run
+      *       doAssertion.run.toFuture
       *       }}}
       *
       * $delay

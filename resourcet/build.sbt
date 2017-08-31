@@ -9,3 +9,8 @@ libraryDependencies += "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0
 enablePlugins(Example)
 
 exampleSuperTypes += "_root_.org.scalamock.scalatest.AsyncMockFactory"
+
+exampleSuperTypes ~= { oldExampleSuperTypes =>
+  import oldExampleSuperTypes._
+  updated(indexOf("_root_.org.scalatest.FreeSpec"), "_root_.org.scalatest.AsyncFreeSpec")
+}

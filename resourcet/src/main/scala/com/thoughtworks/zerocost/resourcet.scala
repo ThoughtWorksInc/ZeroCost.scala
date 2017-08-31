@@ -255,6 +255,8 @@ object resourcet extends ResourceTInstances0 {
     *
     *          ((myResourceStub1.inUse _): () => Unit).verify().repeated(30 to 40)
     *          ((myResourceStub1.close _): () => Unit).verify().once()
+    *
+    *          succeed
     *          }}}
     *
     * @note This `ResourceT` type is an opacity alias to `F[Resource[F, A]]`.
