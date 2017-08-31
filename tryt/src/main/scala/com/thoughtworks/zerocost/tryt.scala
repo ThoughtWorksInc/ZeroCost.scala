@@ -1,4 +1,4 @@
-package com.thoughtworks.zerocost.tryt
+package com.thoughtworks.zerocost
 
 import scala.language.higherKinds
 import scala.util.control.NonFatal
@@ -6,9 +6,9 @@ import scala.util.{Failure, Success, Try}
 import cats._
 import com.thoughtworks.zerocost.LiftIO
 import com.thoughtworks.zerocost.LiftIO.IO
-import com.thoughtworks.zerocost.parallel.covariant.Parallel
+import com.thoughtworks.zerocost.parallel.Parallel
 
-private[tryt] sealed abstract class CovariantTryTInstances3 { this: covariant.type =>
+private[zerocost] sealed abstract class CovariantTryTInstances3 { this: tryt.type =>
 
   /** @group Type classes */
   implicit final def covariantTryTParallelMonadError[F[+ _]](
@@ -21,7 +21,7 @@ private[tryt] sealed abstract class CovariantTryTInstances3 { this: covariant.ty
   }
 }
 
-private[tryt] sealed abstract class CovariantTryTInstances2 extends CovariantTryTInstances3 { this: covariant.type =>
+private[zerocost] sealed abstract class CovariantTryTInstances2 extends CovariantTryTInstances3 { this: tryt.type =>
 
   /** @group Type classes */
   implicit final def covariantTryTParallelLiftIO[F[+ _]](
@@ -40,7 +40,7 @@ private[tryt] sealed abstract class CovariantTryTInstances2 extends CovariantTry
   }
 }
 
-private[tryt] sealed abstract class CovariantTryTInstances1 extends CovariantTryTInstances2 { this: covariant.type =>
+private[zerocost] sealed abstract class CovariantTryTInstances1 extends CovariantTryTInstances2 { this: tryt.type =>
 
   /** @group Type classes */
   implicit final def covariantTryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, +?], Throwable] = {
@@ -50,7 +50,7 @@ private[tryt] sealed abstract class CovariantTryTInstances1 extends CovariantTry
   }
 }
 
-private[tryt] sealed abstract class CovariantTryTInstances0 extends CovariantTryTInstances1 { this: covariant.type =>
+private[zerocost] sealed abstract class CovariantTryTInstances0 extends CovariantTryTInstances1 { this: tryt.type =>
 
   /** @group Type classes */
   implicit final def covariantTryTLiftIO[F[+ _]](implicit F0: LiftIO[F]): LiftIO[TryT[F, ?]] =
@@ -66,9 +66,9 @@ private[tryt] sealed abstract class CovariantTryTInstances0 extends CovariantTry
 }
 
 /** The namespace that contains the covariant [[TryT]]. */
-object covariant extends CovariantTryTInstances0 with Serializable {
+object tryt extends CovariantTryTInstances0 with Serializable {
 
-  private[tryt] trait OpacityTypes extends Serializable {
+  private[zerocost] trait OpacityTypes extends Serializable {
     type TryT[F[+ _], +A]
 
     def toTryT[F[+ _], A](run: F[Try[A]]): TryT[F, A]
@@ -78,7 +78,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
 
   @inline
   @transient
-  private[tryt] lazy val opacityTypes: OpacityTypes = new OpacityTypes {
+  private[zerocost] lazy val opacityTypes: OpacityTypes = new OpacityTypes {
 
     type TryT[F[+ _], +A] = F[Try[A]]
 
@@ -262,7 +262,7 @@ object covariant extends CovariantTryTInstances0 with Serializable {
     *          {{{
     *          import cats.instances.function._
     *          import scala.util._
-    *          import com.thoughtworks.zerocost.tryt.covariant._
+    *          import com.thoughtworks.zerocost.tryt._
     *
     *          type TryName[+A] = TryT[Function0, A]
     *          }}}

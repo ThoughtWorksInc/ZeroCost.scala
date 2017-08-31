@@ -2,7 +2,7 @@ package com.thoughtworks.zerocost
 
 import java.util.concurrent.atomic.AtomicReference
 
-import com.thoughtworks.zerocost.tryt.covariant.{TryT, TryTLiftIO, TryTMonadError, TryTParallelApply}
+import com.thoughtworks.zerocost.tryt.{TryT, TryTLiftIO, TryTMonadError, TryTParallelApply}
 
 import scala.concurrent.ExecutionContext
 import scala.language.higherKinds
@@ -11,13 +11,8 @@ import TryT._
 import cats.{Applicative, Monad, MonadError, Semigroup}
 import com.thoughtworks.zerocost.task._
 import com.thoughtworks.zerocost.continuation.{UnitContinuation, _}
-import com.thoughtworks.zerocost.resourcet.covariant._
-import com.thoughtworks.zerocost.parallel.covariant._
-import com.thoughtworks.zerocost.resourcet.{
-  CovariantResourceTLiftIO,
-  CovariantResourceTMonad,
-  CovariantResourceTParallelApply
-}
+import com.thoughtworks.zerocost.resourcet._
+import parallel._
 
 import scala.util.control.NonFatal
 import cats.syntax.all._
@@ -108,8 +103,8 @@ object raii {
   /** An universal monadic data type that consists of many useful monad transformers.
     *
     * == Features of `Raii` ==
-    *  - [[com.thoughtworks.tryt.covariant.TryT exception handling]]
-    *  - [[com.thoughtworks.raii.covariant.ResourceT automatic resource management]]
+    *  - [[com.thoughtworks.tryt.TryT exception handling]]
+    *  - [[com.thoughtworks.raii.ResourceT automatic resource management]]
     *  - [[raii.AsynchronousRaiiOps.shared reference counting]]
     *  - [[com.thoughtworks.continuation.UnitContinuation raii programming]]
     *  - [[ParallelRaii parallel computing]]
@@ -167,25 +162,17 @@ object raii {
     opacityTypes.parallelRaiiMonadErrorInstances
 
   /** The companion object of [[Raii]]
-    * @define pure Converts a strict value to a `Raii` whose [[covariant.Resource.release release]] operation is no-op.
-    *
-    * @define seenow @see [[pure]] for strict garbage collected `Raii`
-    *
-    * @define delay Returns a non-strict `Raii` whose [[covariant.Resource.release release]] operation is no-op.
-    *
-    * @define seedelay @see [[delay]] for non-strict garbage collected `Raii`
-    *
-    * @define autocloseable Returns a non-strict `Raii` whose [[covariant.Resource.release release]] operation is [[java.lang.AutoCloseable.close]].
-    *
-    * @define releasable Returns a non-strict `Raii` whose [[covariant.Resource.release release]] operation is raii.
-    *
+ *
+    * @define pure             Converts a strict value to a `Raii` whose [[parallel.Resource.release release]] operation is no-op.
+    * @define seenow           @see [[pure]] for strict garbage collected `Raii`
+    * @define delay            Returns a non-strict `Raii` whose [[parallel.Resource.release release]] operation is no-op.
+    * @define seedelay         @see [[delay]] for non-strict garbage collected `Raii`
+    * @define autocloseable    Returns a non-strict `Raii` whose [[parallel.Resource.release release]] operation is [[java.lang.AutoCloseable.close]].
+    * @define releasable       Returns a non-strict `Raii` whose [[parallel.Resource.release release]] operation is raii.
     * @define seeautocloseable @see [[autoCloseable]] for auto-closeable `Raii`
-    *
-    * @define seereleasable @see [[monadicCloseable]] for creating a `Raii` whose [[covariant.Resource.release release]] operation is raii.
-    *
-    * @define nonstrict Since the `Raii` is non-strict,
-    *                   `A` will be recreated each time it is sequenced into a larger `Raii`.
-    *
+    * @define seereleasable    @see [[monadicCloseable]] for creating a `Raii` whose [[parallel.Resource.release release]] operation is raii.
+    * @define nonstrict        Since the `Raii` is non-strict,
+    *                          `A` will be recreated each time it is sequenced into a larger `Raii`.
     * @define garbageCollected `A` must be a garbage-collected type that does not hold native resource.
     */
   object Raii {
@@ -359,7 +346,7 @@ object raii {
       *
       * All resources created during building `A` will be released after `A` is built.
       *
-      * @note `A` must be a garbage collected type, i.e. not a [[java.lang.AutoCloseable]] or a [[com.thoughtworks.raii.covariant.MonadicCloseable]]
+      * @note `A` must be a garbage collected type, i.e. not a [[java.lang.AutoCloseable]] or a [[com.thoughtworks.raii.MonadicCloseable]]
       * @note This method has the same behavior as `Raii.garbageCollected(doA.run)`.
       * @see [[garbageCollected]] for creating a garbage collected `Raii`
       * @see [[AsynchronousRaiiOps.run]] for running a `Raii` as a [[com.thoughtworks.future.Task ThoughtWorks Task]].

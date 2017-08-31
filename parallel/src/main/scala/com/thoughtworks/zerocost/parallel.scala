@@ -1,13 +1,12 @@
-package com.thoughtworks.zerocost.parallel
-
-import scala.language.higherKinds
+package com.thoughtworks.zerocost
+import language.higherKinds
 
 /**
   * @author 杨博 (Yang Bo)
   */
-object covariant {
+object parallel {
 
-  private[covariant] trait OpacityTypes {
+  private[parallel] trait OpacityTypes {
     type Parallel[F[+ _], +A]
 
     def toParallel[F[+ _], A](fa: F[A]): Parallel[F, A]
@@ -16,7 +15,7 @@ object covariant {
     def unliftTypeClass[M[_[_]], F[+ _]](typeClass: M[Parallel[F, ?]]): M[F]
   }
 
-  private[covariant] val opacityTypes: OpacityTypes = new OpacityTypes {
+  private[parallel] val opacityTypes: OpacityTypes = new OpacityTypes {
     type Parallel[F[+ _], +A] = F[A]
     def toParallel[F[+ _], A](fa: F[A]): Parallel[F, A] = fa
     def fromParallel[F[+ _], A](parallel: Parallel[F, A]): F[A] = parallel

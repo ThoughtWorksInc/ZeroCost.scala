@@ -8,6 +8,4 @@ libraryDependencies += "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0
 
 enablePlugins(Example)
 
-organization in generateExample := "com.thoughtworks.zerocost.resourcet"
-
 exampleSuperTypes += "_root_.org.scalamock.scalatest.AsyncMockFactory"

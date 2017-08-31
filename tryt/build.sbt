@@ -7,5 +7,3 @@ scalacOptions += "-Ypartial-unification"
 enablePlugins(Example)
 
 exampleSuperTypes += "_root_.org.scalatest.Inside"
-
-organization in generateExample := "com.thoughtworks.zerocost.tryt"

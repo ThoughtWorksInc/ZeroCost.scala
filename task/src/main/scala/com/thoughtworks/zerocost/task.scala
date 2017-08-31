@@ -23,9 +23,9 @@ import scala.util.control.TailCalls
 import scala.util.control.TailCalls.TailRec
 import cats.{Applicative, Monad, MonadError, Semigroup}
 import cats.syntax.all._
-import com.thoughtworks.zerocost.parallel.covariant._
+import parallel._
 import com.thoughtworks.zerocost.continuation._
-import com.thoughtworks.zerocost.tryt.covariant._
+import com.thoughtworks.zerocost.tryt._
 
 /** The name space that contains [[task.Task]] and utilities for `Task`.
   *
@@ -194,20 +194,20 @@ object task {
       fromContinuation(UnitContinuation.delay(Try(a)))
     }
 
-    /** Creates a [[Task]] from the raw [[com.thoughtworks.zerocost.tryt.covariant.TryT]] */
+    /** Creates a [[Task]] from the raw [[com.thoughtworks.zerocost.tryt.TryT]] */
     @inline
     def apply[A](tryT: TryT[UnitContinuation, A]): Task[A] = {
       opacityTypes.fromTryT(tryT)
     }
 
-    /** Extracts the underlying [[com.thoughtworks.zerocost.tryt.covariant.TryT]] of `future`
+    /** Extracts the underlying [[com.thoughtworks.zerocost.tryt.TryT]] of `future`
       *
       * @example This `unapply` can be used in pattern matching expression.
       *          {{{
       *          import com.thoughtworks.zerocost.task.Task
       *          import com.thoughtworks.zerocost.continuation.UnitContinuation
       *          val Task(tryT) = Task.pure[Int](42)
-      *          tryT should be(a[com.thoughtworks.zerocost.tryt.covariant.TryT[UnitContinuation, _]])
+      *          tryT should be(a[com.thoughtworks.zerocost.tryt.TryT[UnitContinuation, _]])
       *          }}}
       *
       */
@@ -241,7 +241,7 @@ object task {
     *          and two `ParallelTask`s that throw exceptions,
     *
     *          {{{
-    *          import com.thoughtworks.zerocost.parallel.covariant.Parallel
+    *          import com.thoughtworks.zerocost.parallel.Parallel
     *          def futureB(a: String): ParallelTask[String] = Parallel(Task.execute { throw new Exception("b failed"); a + "b" })
     *          def futureC(a: String): ParallelTask[String] = Parallel(Task.execute { throw new Exception("c failed"); a + "c" })
     *          }}}

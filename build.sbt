@@ -1,16 +1,16 @@
 lazy val LiftIO = project
 
-lazy val `parallel-covariant` = project
+lazy val parallel = project
 
-lazy val continuation = project.dependsOn(`parallel-covariant`, LiftIO)
+lazy val continuation = project.dependsOn(parallel, LiftIO)
 
-lazy val `tryt-covariant` = project.dependsOn(`parallel-covariant`, LiftIO)
+lazy val tryt = project.dependsOn(parallel, LiftIO)
 
-lazy val task = project.dependsOn(continuation, `tryt-covariant`, MultipleException)
+lazy val task = project.dependsOn(continuation, tryt, MultipleException)
 
-lazy val `resourcet-covariant` = project.dependsOn(`parallel-covariant`, LiftIO)
+lazy val resourcet = project.dependsOn(parallel, LiftIO)
 
-lazy val raii = project.dependsOn(`resourcet-covariant`, task)
+lazy val raii = project.dependsOn(resourcet, task)
 
 lazy val MultipleException = project
 

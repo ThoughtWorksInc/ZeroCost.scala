@@ -1,7 +1,7 @@
 package com.thoughtworks.zerocost
 
 import java.util.concurrent.atomic.AtomicReference
-import com.thoughtworks.zerocost.parallel.covariant._
+import parallel._
 import scala.concurrent.{ExecutionContext, Future, Promise, SyncVar}
 import cats.{Applicative, Monad}
 import com.thoughtworks.zerocost.LiftIO.IO
@@ -126,12 +126,12 @@ object continuation {
     }
   }
 
-  /** [[com.thoughtworks.zerocost.parallel.covariant.Parallel Parallel]]-tagged type of [[UnitContinuation]] that needs to be executed in parallel when using an [[cats.Applicative]] instance
+  /** [[parallel.Parallel Parallel]]-tagged type of [[UnitContinuation]] that needs to be executed in parallel when using an [[cats.Applicative]] instance
     *
     * @example Given two [[ParallelContinuation]]s that contain immediate values,
     *
     *          {{{
-    *          import com.thoughtworks.zerocost.parallel.covariant._
+    *          import com.thoughtworks.zerocost.parallel._
     *          import com.thoughtworks.zerocost.continuation._
     *
     *          val pc0: ParallelContinuation[Int] = Parallel(Continuation.pure[Unit, Int](40))
@@ -154,12 +154,11 @@ object continuation {
     *            _ should be(42)
     *          }.toScalaFuture
     *          }}}
-    *
     * @example Given two [[ParallelContinuation]]s,
     *          each of them modifies a `var`,
     *
     *          {{{
-    *          import com.thoughtworks.zerocost.parallel.covariant._
+    *          import com.thoughtworks.zerocost.parallel._
     *          import com.thoughtworks.zerocost.continuation._
     *
     *          var count0 = 0
@@ -197,7 +196,6 @@ object continuation {
     *            count1 should be(1)
     *          }.toScalaFuture
     *          }}}
-    *
     * @template
     */
   type ParallelContinuation[A] = Parallel[UnitContinuation, A]

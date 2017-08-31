@@ -1,12 +1,11 @@
-package com.thoughtworks.zerocost.resourcet
+package com.thoughtworks.zerocost
 
 import cats.{Applicative, Apply, FlatMap, Foldable, Functor, Monad, MonadError}
-import com.thoughtworks.zerocost.parallel.covariant.Parallel
-import covariant._
+import com.thoughtworks.zerocost.parallel.Parallel
+import resourcet._
 
 import scala.language.higherKinds
 import cats.syntax.all._
-import com.thoughtworks.zerocost.LiftIO
 import com.thoughtworks.zerocost.LiftIO.IO
 
 private[thoughtworks] sealed abstract class CovariantResourceTInstances3 {
@@ -57,7 +56,7 @@ private[thoughtworks] sealed abstract class CovariantResourceTInstances0 extends
 private[thoughtworks] trait CovariantResourceTPoint[F[+ _]] extends Applicative[ResourceT[F, ?]] {
   private[thoughtworks] implicit def F: Applicative[F]
 
-  override def pure[A](a: A): ResourceT[F, A] = covariant.ResourceT.pure(a)
+  override def pure[A](a: A): ResourceT[F, A] = ResourceT.pure(a)
 }
 
 private[thoughtworks] trait CovariantResourceTApplicative[F[+ _]]
@@ -171,7 +170,7 @@ private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
           override def value: B = b
 
           override val release: F[Unit] = {
-            covariant.appendMonadicUnit(releaseB, releaseA)
+            appendMonadicUnit(releaseB, releaseA)
           }
         }
       }
@@ -184,10 +183,10 @@ private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
   *
   * Usage:
   * {{{
-  * import com.thoughtworks.zerocost.resourcet.covariant._
+  * import com.thoughtworks.zerocost.resourcet._
   * }}}
   */
-object covariant extends CovariantResourceTInstances0 {
+object resourcet extends CovariantResourceTInstances0 {
 
   private[thoughtworks] def appendMonadicUnit[F[+ _]](f0: F[Unit], f1: F[Unit])(implicit F: Monad[F]): F[Unit] = {
     val noop = F.unit
@@ -220,7 +219,7 @@ object covariant extends CovariantResourceTInstances0 {
     *          {{{
     *          import scala.Function0
     *          import cats.instances.function._
-    *          import com.thoughtworks.zerocost.resourcet.covariant._
+    *          import com.thoughtworks.zerocost.resourcet._
     *          type RAII[A] = ResourceT[Function0, A]
     *          }}}
     *
