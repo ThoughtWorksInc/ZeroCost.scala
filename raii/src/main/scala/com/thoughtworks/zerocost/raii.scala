@@ -78,7 +78,7 @@ object raii {
     *  - [[com.thoughtworks.zerocost.resourcet.ResourceT automatic resource management]]
     *  - [[RaiiOps.shared reference counting]]
     *  - [[com.thoughtworks.zerocost.continuation.UnitContinuation raii programming]]
-    *  - [[Parallel parallel computing]]
+    *  - [[parallel.Parallel parallel computing]]
     *
     * @note This `Raii` type is an [[https://www.reddit.com/r/scala/comments/5qbdgq/value_types_without_anyval/dcxze9q/ opacity alias]] to `UnitContinuation[Resource[UnitContinuation, Try[A]]]`.
     * @see [[Raii$ Raii]] companion object for all type classes and helper functions for this `Raii` type.

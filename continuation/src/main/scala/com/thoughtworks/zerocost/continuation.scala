@@ -391,6 +391,11 @@ object continuation {
       Continuation.safeAsync(TailrecM(f, a))
 
     override def liftIO[A](io: IO[A]) = Continuation.liftIO(io)
+
+    override def map[A, B](fa: Continuation[R, A])(f: (A) => B): Continuation[R, B] = Continuation.safeAsync(Map(fa, f))
+
+    override def flatten[A](ffa: Continuation[R, Continuation[R, A]]): Continuation[R, A] =
+      Continuation.safeAsync(Join(ffa))
   }
 
   /**
