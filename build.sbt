@@ -12,6 +12,8 @@ lazy val resourcet = project.dependsOn(parallel, LiftIO)
 
 lazy val raii = project.dependsOn(resourcet, parallel, task)
 
+lazy val remote = project.dependsOn(raii)
+
 lazy val MultipleException = project
 
 crossScalaVersions in ThisBuild := Seq("2.11.11", "2.12.3")
