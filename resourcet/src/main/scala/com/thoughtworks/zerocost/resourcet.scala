@@ -8,175 +8,48 @@ import scala.language.higherKinds
 import cats.syntax.all._
 import com.thoughtworks.zerocost.LiftIO.IO
 
-private[thoughtworks] sealed abstract class CovariantResourceTInstances3 {
+private[thoughtworks] sealed abstract class ResourceTInstances3 {
 
   /** @group Type classes */
-  implicit def covariantResourceTApplicative[F[+ _]: Applicative]: Applicative[ResourceT[F, ?]] =
-    new CovariantResourceTApplicative[F] {
+  implicit def resourceTApplicative[F[+ _]: Applicative]: Applicative[ResourceT[F, ?]] =
+    new ResourceTApplicative[F] {
       override private[thoughtworks] def F = implicitly
     }
 }
 
-private[thoughtworks] sealed abstract class CovariantResourceTInstances2 extends CovariantResourceTInstances3 {
+private[thoughtworks] sealed abstract class ResourceTInstances2 extends ResourceTInstances3 {
 
   /** @group Type classes */
-  implicit def covariantResourceTMonad[F[+ _]: Monad]: Monad[ResourceT[F, ?]] =
-    new CovariantResourceTMonad[F] {
+  implicit def resourceTMonad[F[+ _]: Monad]: Monad[ResourceT[F, ?]] =
+    new ResourceTMonad[F] {
       private[thoughtworks] override def F = implicitly
     }
 }
 
-private[thoughtworks] sealed abstract class CovariantResourceTInstances1 extends CovariantResourceTInstances2 {
+private[thoughtworks] sealed abstract class ResourceTInstances1 extends ResourceTInstances2 {
 
   /** @group Type classes */
-  implicit def covariantResourceTParallelLiftIO[F[+ _]](
+  implicit def resourceTParallelLiftIO[F[+ _]](
       implicit F0: LiftIO[Parallel[F, ?]]): LiftIO[Parallel[ResourceT[F, `+?`], ?]] =
-    Parallel.liftTypeClass[LiftIO, ResourceT[F, `+?`]](new CovariantResourceTLiftIO[F] {
+    Parallel.liftTypeClass[LiftIO, ResourceT[F, `+?`]](new ResourceTLiftIO[F] {
       override private[thoughtworks] def F: LiftIO[F] = Parallel.unliftTypeClass(F0)
     })
 }
 
-private[thoughtworks] sealed abstract class CovariantResourceTInstances0 extends CovariantResourceTInstances1 {
+private[thoughtworks] sealed abstract class ResourceTInstances0 extends ResourceTInstances1 {
 
   /** @group Type classes */
-  implicit def covariantResourceTParallelMonad[F[+ _]](
+  implicit def resourceTParallelMonad[F[+ _]](
       implicit F0: Monad[Parallel[F, ?]]): Monad[Parallel[ResourceT[F, `+?`], ?]] =
-    Parallel.liftTypeClass[Monad, ResourceT[F, `+?`]](
-      new CovariantResourceTMonad[F] with CovariantResourceTParallelApply[F] {
-        override private[thoughtworks] def F: Monad[F] = Parallel.unliftTypeClass(F0)
-      })
+    Parallel.liftTypeClass[Monad, ResourceT[F, `+?`]](new ResourceTMonad[F] with ResourceTParallelApply[F] {
+      override private[thoughtworks] def F: Monad[F] = Parallel.unliftTypeClass(F0)
+    })
 
   /** @group Type classes */
-  implicit def covariantResourceTLiftIO[F[+ _]: LiftIO]: LiftIO[ResourceT[F, ?]] with LiftIO[ResourceT[F, ?]] =
-    new CovariantResourceTLiftIO[F] {
+  implicit def resourceTLiftIO[F[+ _]: LiftIO]: LiftIO[ResourceT[F, ?]] with LiftIO[ResourceT[F, ?]] =
+    new ResourceTLiftIO[F] {
       override private[thoughtworks] def F: LiftIO[F] = implicitly
     }
-}
-
-private[thoughtworks] trait CovariantResourceTPoint[F[+ _]] extends Applicative[ResourceT[F, ?]] {
-  private[thoughtworks] implicit def F: Applicative[F]
-
-  override def pure[A](a: A): ResourceT[F, A] = ResourceT.pure(a)
-}
-
-private[thoughtworks] trait CovariantResourceTApplicative[F[+ _]]
-    extends Applicative[ResourceT[F, ?]]
-    with CovariantResourceTPoint[F] {
-
-  override def ap[A, B](f: ResourceT[F, (A) => B])(fa: ResourceT[F, A]): ResourceT[F, B] = {
-    ResourceT(
-      Applicative[F].map2(opacityTypes.fromResourceT(fa), opacityTypes.fromResourceT(f)) { (releasableA, releasableF) =>
-        val releaseA = releasableA.release
-        Resource[F, B](
-          value = releasableF.value(releasableA.value),
-          release = Applicative[F].map2(releaseA, releasableF.release) { (_: Unit, _: Unit) =>
-            ()
-          }
-        )
-      }
-    )
-  }
-}
-
-private[thoughtworks] trait CovariantResourceTLiftIO[F[+ _]] extends LiftIO[ResourceT[F, ?]] {
-  private[thoughtworks] implicit def F: LiftIO[F]
-
-  override def liftIO[A](io: IO[A]) = ResourceT.liftIO(io)
-}
-
-private[thoughtworks] trait CovariantResourceTFunctor[F[+ _]] extends Functor[ResourceT[F, ?]] {
-  private[thoughtworks] implicit def F: Functor[F]
-
-  override def map[A, B](pfa: ResourceT[F, A])(f: (A) => B): ResourceT[F, B] = {
-    val ResourceT(fa) = pfa
-    val fb = F.map(fa) { releasableA: Resource[F, A] =>
-      Resource[F, B](
-        value = f(releasableA.value),
-        release = releasableA.release
-      )
-    }
-    ResourceT(fb)
-  }
-}
-
-private[thoughtworks] trait CovariantResourceTParallelApply[F[+ _]]
-    extends CovariantResourceTFunctor[F]
-    with Apply[ResourceT[F, ?]] {
-  private[thoughtworks] implicit def F: Apply[F]
-
-  override def product[A, B](pf: ResourceT[F, A], pfa: ResourceT[F, B]): ResourceT[F, (A, B)] = {
-    // FIXME: improve naming
-    val ResourceT(fa) = pfa
-    val ResourceT(f) = pf
-    val fResourceB = F.map2(fa, f) { (resourceA, resourceF) =>
-      val valueB = (resourceF.value, resourceA.value)
-      val releaseA = resourceA.release
-      val releaseF = resourceF.release
-      val release = F.map2(releaseA, releaseF) { (_: Unit, _: Unit) =>
-        ()
-      }
-      Resource(value = valueB, release = release)
-
-    }
-    ResourceT(fResourceB)
-  }
-
-  override def ap[A, B](pf: ResourceT[F, A => B])(pfa: ResourceT[F, A]): ResourceT[F, B] = {
-    val ResourceT(fa) = pfa
-    val ResourceT(f) = pf
-    val fResourceB = F.map2(fa, f) { (resourceA, resourceF) =>
-      val valueB = resourceF.value(resourceA.value)
-      val releaseA = resourceA.release
-      val releaseF = resourceF.release
-      val release = F.map2(releaseA, releaseF) { (_: Unit, _: Unit) =>
-        ()
-      }
-      Resource[F, B](value = valueB, release = release)
-
-    }
-    ResourceT(fResourceB)
-  }
-}
-
-private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
-    extends CovariantResourceTApplicative[F]
-    with Monad[ResourceT[F, ?]] {
-  private[thoughtworks] implicit override def F: Monad[F]
-
-  override def tailRecM[A, B](begin: A)(f: A => ResourceT[F, Either[A, B]]): ResourceT[F, B] = {
-    val fResourceB = F.tailRecM(Resource.pure[F, A](begin)) {
-      case Resource(a, release) =>
-        val ResourceT(resourceEither) = f(a)
-        resourceEither.map {
-          case Resource(Left(nextA), releaseNext) =>
-            Left(Resource(value = nextA, release = appendMonadicUnit(releaseNext, release)))
-          case Resource(Right(nextB), releaseNext) =>
-            Right(Resource(value = nextB, release = appendMonadicUnit(releaseNext, release)))
-        }
-    }
-    ResourceT(fResourceB)
-  }
-
-  override def flatMap[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = {
-    ResourceT(
-      for {
-        releasableA <- opacityTypes.fromResourceT(fa)
-        releasableB <- opacityTypes.fromResourceT(f(releasableA.value))
-      } yield {
-        val b = releasableB.value
-        val releaseB = releasableB.release
-        val releaseA = releasableA.release
-        new Serializable with Resource[F, B] {
-          override def value: B = b
-
-          override val release: F[Unit] = {
-            appendMonadicUnit(releaseB, releaseA)
-          }
-        }
-      }
-    )
-  }
-
 }
 
 /** The namespace that contains the covariant [[ResourceT]].
@@ -186,7 +59,128 @@ private[thoughtworks] trait CovariantResourceTMonad[F[+ _]]
   * import com.thoughtworks.zerocost.resourcet._
   * }}}
   */
-object resourcet extends CovariantResourceTInstances0 {
+object resourcet extends ResourceTInstances0 {
+
+  private[thoughtworks] trait ResourceTPoint[F[+ _]] extends Applicative[ResourceT[F, ?]] {
+    private[thoughtworks] implicit def F: Applicative[F]
+
+    override def pure[A](a: A): ResourceT[F, A] = ResourceT.pure(a)
+  }
+
+  private[thoughtworks] trait ResourceTApplicative[F[+ _]] extends Applicative[ResourceT[F, ?]] with ResourceTPoint[F] {
+
+    override def ap[A, B](f: ResourceT[F, (A) => B])(fa: ResourceT[F, A]): ResourceT[F, B] = {
+      ResourceT(
+        Applicative[F].map2(opacityTypes.fromResourceT(fa), opacityTypes.fromResourceT(f)) {
+          (releasableA, releasableF) =>
+            val releaseA = releasableA.release
+            Resource[F, B](
+              value = releasableF.value(releasableA.value),
+              release = Applicative[F].map2(releaseA, releasableF.release) { (_: Unit, _: Unit) =>
+                ()
+              }
+            )
+        }
+      )
+    }
+  }
+
+  private[thoughtworks] trait ResourceTLiftIO[F[+ _]] extends LiftIO[ResourceT[F, ?]] {
+    private[thoughtworks] implicit def F: LiftIO[F]
+
+    override def liftIO[A](io: IO[A]) = ResourceT.liftIO(io)
+  }
+
+  private[thoughtworks] trait ResourceTFunctor[F[+ _]] extends Functor[ResourceT[F, ?]] {
+    private[thoughtworks] implicit def F: Functor[F]
+
+    override def map[A, B](pfa: ResourceT[F, A])(f: (A) => B): ResourceT[F, B] = {
+      val ResourceT(fa) = pfa
+      val fb = F.map(fa) { releasableA: Resource[F, A] =>
+        Resource[F, B](
+          value = f(releasableA.value),
+          release = releasableA.release
+        )
+      }
+      ResourceT(fb)
+    }
+  }
+
+  private[thoughtworks] trait ResourceTParallelApply[F[+ _]] extends ResourceTFunctor[F] with Apply[ResourceT[F, ?]] {
+    private[thoughtworks] implicit def F: Apply[F]
+
+    override def product[A, B](pf: ResourceT[F, A], pfa: ResourceT[F, B]): ResourceT[F, (A, B)] = {
+      // FIXME: improve naming
+      val ResourceT(fa) = pfa
+      val ResourceT(f) = pf
+      val fResourceB = F.map2(fa, f) { (resourceA, resourceF) =>
+        val valueB = (resourceF.value, resourceA.value)
+        val releaseA = resourceA.release
+        val releaseF = resourceF.release
+        val release = F.map2(releaseA, releaseF) { (_: Unit, _: Unit) =>
+          ()
+        }
+        Resource(value = valueB, release = release)
+
+      }
+      ResourceT(fResourceB)
+    }
+
+    override def ap[A, B](pf: ResourceT[F, A => B])(pfa: ResourceT[F, A]): ResourceT[F, B] = {
+      val ResourceT(fa) = pfa
+      val ResourceT(f) = pf
+      val fResourceB = F.map2(fa, f) { (resourceA, resourceF) =>
+        val valueB = resourceF.value(resourceA.value)
+        val releaseA = resourceA.release
+        val releaseF = resourceF.release
+        val release = F.map2(releaseA, releaseF) { (_: Unit, _: Unit) =>
+          ()
+        }
+        Resource[F, B](value = valueB, release = release)
+
+      }
+      ResourceT(fResourceB)
+    }
+  }
+
+  private[thoughtworks] trait ResourceTMonad[F[+ _]] extends ResourceTApplicative[F] with Monad[ResourceT[F, ?]] {
+    private[thoughtworks] implicit override def F: Monad[F]
+
+    override def tailRecM[A, B](begin: A)(f: A => ResourceT[F, Either[A, B]]): ResourceT[F, B] = {
+      val fResourceB = F.tailRecM(Resource.pure[F, A](begin)) {
+        case Resource(a, release) =>
+          val ResourceT(resourceEither) = f(a)
+          resourceEither.map {
+            case Resource(Left(nextA), releaseNext) =>
+              Left(Resource(value = nextA, release = appendMonadicUnit(releaseNext, release)))
+            case Resource(Right(nextB), releaseNext) =>
+              Right(Resource(value = nextB, release = appendMonadicUnit(releaseNext, release)))
+          }
+      }
+      ResourceT(fResourceB)
+    }
+
+    override def flatMap[A, B](fa: ResourceT[F, A])(f: (A) => ResourceT[F, B]): ResourceT[F, B] = {
+      ResourceT(
+        for {
+          releasableA <- opacityTypes.fromResourceT(fa)
+          releasableB <- opacityTypes.fromResourceT(f(releasableA.value))
+        } yield {
+          val b = releasableB.value
+          val releaseB = releasableB.release
+          val releaseA = releasableA.release
+          new Serializable with Resource[F, B] {
+            override def value: B = b
+
+            override val release: F[Unit] = {
+              appendMonadicUnit(releaseB, releaseA)
+            }
+          }
+        }
+      )
+    }
+
+  }
 
   private[thoughtworks] def appendMonadicUnit[F[+ _]](f0: F[Unit], f1: F[Unit])(implicit F: Monad[F]): F[Unit] = {
     val noop = F.unit
@@ -337,7 +331,7 @@ object resourcet extends CovariantResourceTInstances0 {
     *
     * @note There are some implicit method that provides [[cats.Monad]]s as monad transformers of `F`.
     *       Those monads running will collect all resources,
-    *       which will be open and release altogether when [[CovariantResourceTOps.run]] is called.
+    *       which will be open and release altogether when [[ResourceTOps.run]] is called.
     */
   object ResourceT {
 
@@ -384,9 +378,9 @@ object resourcet extends CovariantResourceTInstances0 {
   }
 
   /** @group Type classes */
-  implicit def covariantResourceTParallelApply[F[+ _]](
+  implicit def resourceTParallelApply[F[+ _]](
       implicit F0: Apply[Parallel[F, ?]]): Apply[Parallel[ResourceT[F, `+?`], ?]] = {
-    Parallel.liftTypeClass[Apply, ResourceT[F, `+?`]](new CovariantResourceTParallelApply[F] {
+    Parallel.liftTypeClass[Apply, ResourceT[F, `+?`]](new ResourceTParallelApply[F] {
       override private[thoughtworks] implicit def F = Parallel.unliftTypeClass(F0)
     })
   }
@@ -395,7 +389,7 @@ object resourcet extends CovariantResourceTInstances0 {
     fa.map[Either[S, A]](Right(_)).handleErrorWith(e => Left(e).pure[F])
   }
 
-  implicit final class CovariantResourceTOps[F[+ _], A](resourceT: ResourceT[F, A]) {
+  implicit final class ResourceTOps[F[+ _], A](resourceT: ResourceT[F, A]) {
 
     /** Returns a `F` that performs the following process:
       *
@@ -415,7 +409,7 @@ object resourcet extends CovariantResourceTInstances0 {
     /** Returns a resource of `B` based on a resource of `A` and a function that creates `B`,
       * for those `B` do not reference to `A` or `A` is a garbage collected object.
       *
-      * @note `intransitiveMap` is to `map` in [[covariantResourceTMonad]],
+      * @note `intransitiveMap` is to `map` in [[resourceTMonad]],
       *       except `intransitiveMap` will release `A` right after `B` is created.
       *
       *       Don't use this method if you need to retain `A` until `B` is released.
@@ -439,7 +433,7 @@ object resourcet extends CovariantResourceTInstances0 {
     /** Returns a resource of `B` based on a resource of `A` and a function that creates resource of `B`,
       * for those `B` do not reference to `A` or `A` is a garbage collected object.
       *
-      * @note `intransitiveFlatMap` is similar to `flatMap` in [[covariantResourceTMonad]],
+      * @note `intransitiveFlatMap` is similar to `flatMap` in [[resourceTMonad]],
       *       except `intransitiveFlatMap` will release `A` right after `B` is created.
       *
       *       Don't use this method if you need to retain `A` until `B` is released.

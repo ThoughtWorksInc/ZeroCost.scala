@@ -4,14 +4,13 @@ import scala.language.higherKinds
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import cats._
-import com.thoughtworks.zerocost.LiftIO
 import com.thoughtworks.zerocost.LiftIO.IO
 import com.thoughtworks.zerocost.parallel.Parallel
 
-private[zerocost] sealed abstract class CovariantTryTInstances3 { this: tryt.type =>
+private[zerocost] sealed abstract class TryTInstances3 { this: tryt.type =>
 
   /** @group Type classes */
-  implicit final def covariantTryTParallelMonadError[F[+ _]](
+  implicit final def tryTParallelMonadError[F[+ _]](
       implicit F0: Monad[Parallel[F, ?]],
       E0: Semigroup[Throwable]): MonadError[Parallel[TryT[F, +?], ?], Throwable] = {
     Parallel.liftTypeClass[MonadError[?[_], Throwable], TryT[F, +?]](new TryTMonadError[F] with TryTParallelApply[F] {
@@ -21,17 +20,17 @@ private[zerocost] sealed abstract class CovariantTryTInstances3 { this: tryt.typ
   }
 }
 
-private[zerocost] sealed abstract class CovariantTryTInstances2 extends CovariantTryTInstances3 { this: tryt.type =>
+private[zerocost] sealed abstract class TryTInstances2 extends TryTInstances3 { this: tryt.type =>
 
   /** @group Type classes */
-  implicit final def covariantTryTParallelLiftIO[F[+ _]](
+  implicit final def tryTParallelLiftIO[F[+ _]](
       implicit F0: LiftIO[Parallel[F, ?]]): LiftIO[Parallel[TryT[F, +?], ?]] =
     Parallel.liftTypeClass[LiftIO, TryT[F, +?]](new TryTLiftIO[F] {
       implicit override def F: LiftIO[F] = Parallel.unliftTypeClass(F0)
     })
 
   /** @group Type classes */
-  implicit final def covariantTryTParallelApply[F[+ _]](implicit F0: Apply[Parallel[F, ?]],
+  implicit final def tryTParallelApply[F[+ _]](implicit F0: Apply[Parallel[F, ?]],
                                                         E0: Semigroup[Throwable]): Apply[Parallel[TryT[F, +?], ?]] = {
     Parallel.liftTypeClass[Apply, TryT[F, +?]](new TryTParallelApply[F] {
       override implicit def E: Semigroup[Throwable] = E0
@@ -40,33 +39,33 @@ private[zerocost] sealed abstract class CovariantTryTInstances2 extends Covarian
   }
 }
 
-private[zerocost] sealed abstract class CovariantTryTInstances1 extends CovariantTryTInstances2 { this: tryt.type =>
+private[zerocost] sealed abstract class TryTInstances1 extends TryTInstances2 { this: tryt.type =>
 
   /** @group Type classes */
-  implicit final def covariantTryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, +?], Throwable] = {
+  implicit final def tryTMonadError[F[+ _]](implicit F0: Monad[F]): MonadError[TryT[F, +?], Throwable] = {
     new TryTMonadError[F] {
       implicit override def F: Monad[F] = F0
     }
   }
 }
 
-private[zerocost] sealed abstract class CovariantTryTInstances0 extends CovariantTryTInstances1 { this: tryt.type =>
+private[zerocost] sealed abstract class TryTInstances0 extends TryTInstances1 { this: tryt.type =>
 
   /** @group Type classes */
-  implicit final def covariantTryTLiftIO[F[+ _]](implicit F0: LiftIO[F]): LiftIO[TryT[F, ?]] =
+  implicit final def tryTLiftIO[F[+ _]](implicit F0: LiftIO[F]): LiftIO[TryT[F, ?]] =
     new TryTLiftIO[F] {
       implicit override def F: LiftIO[F] = F0
     }
 
   /** @group Type classes */
-  implicit final def covariantTryTFunctor[F[+ _]](implicit F0: Functor[F]): Functor[TryT[F, ?]] =
+  implicit final def tryTFunctor[F[+ _]](implicit F0: Functor[F]): Functor[TryT[F, ?]] =
     new TryTFunctor[F] {
       implicit override def F: Functor[F] = F0
     }
 }
 
 /** The namespace that contains the covariant [[TryT]]. */
-object tryt extends CovariantTryTInstances0 with Serializable {
+object tryt extends TryTInstances0 with Serializable {
 
   private[zerocost] trait OpacityTypes extends Serializable {
     type TryT[F[+ _], +A]

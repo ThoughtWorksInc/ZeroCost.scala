@@ -54,8 +54,8 @@ object raii {
   private val UnitContinuationInstances = continuationInstances[Unit]
 
   private object RaiiContinuationInstances
-      extends CovariantResourceTMonad[UnitContinuation]
-      with CovariantResourceTLiftIO[UnitContinuation] {
+      extends ResourceTMonad[UnitContinuation]
+      with ResourceTLiftIO[UnitContinuation] {
     override implicit def F = UnitContinuationInstances
   }
 
@@ -66,9 +66,9 @@ object raii {
   private val ParallelContinuationInstances = parallelContinuationInstances
 
   private object ParallelRaiiContinuationInstances
-      extends CovariantResourceTMonad[UnitContinuation]
-      with CovariantResourceTLiftIO[UnitContinuation]
-      with CovariantResourceTParallelApply[UnitContinuation] {
+      extends ResourceTMonad[UnitContinuation]
+      with ResourceTLiftIO[UnitContinuation]
+      with ResourceTParallelApply[UnitContinuation] {
     override implicit def F =
       Parallel.unliftTypeClass[Lambda[F[_] => Monad[F] with LiftIO[F]], UnitContinuation](ParallelContinuationInstances)
   }
