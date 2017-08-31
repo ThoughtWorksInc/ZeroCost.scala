@@ -14,6 +14,8 @@ lazy val raii = project.dependsOn(resourcet, parallel, task)
 
 lazy val MultipleException = project
 
+lazy val FlatMappable = project
+
 crossScalaVersions in ThisBuild := Seq("2.11.11", "2.12.3")
 
 organization in ThisBuild := "com.thoughtworks.zerocost"
