@@ -24,26 +24,17 @@ import scala.util.control.TailCalls.TailRec
   */
 object raii {
 
-  private def fromContinuation[A](future: UnitContinuation[Resource[UnitContinuation, Try[A]]]): Raii[A] = {
-    Raii(Parallel(TryT[RaiiContinuation, A](ResourceT(future))))
-  }
-
-  private def toContinuation[A](doValue: Raii[A]): UnitContinuation[Resource[UnitContinuation, Try[A]]] = {
-    val Raii(Parallel(TryT(ResourceT(future)))) = doValue
-    future
-  }
-
   /** @template */
   private[raii] type RaiiContinuation[+A] = ResourceT[UnitContinuation, A]
 
   private[raii] trait OpacityTypes {
     type Raii[+A]
 
-    private[raii] def fromTryT[A](parallelTryT: Parallel[TryT[RaiiContinuation, +?], A]): Raii[A]
+    private[raii] def wrapToRaii[A](parallelTryT: Parallel[TryT[RaiiContinuation, +?], A]): Raii[A]
 
-    private[raii] def toTryT[A](raii: Raii[A]): Parallel[TryT[RaiiContinuation, +?], A]
+    private[raii] def unwrapRaii[A](raii: Raii[A]): Parallel[TryT[RaiiContinuation, +?], A]
 
-    implicit private[raii] def parallelRaiiMonadErrorInstances: MonadError[Raii, Throwable] with LiftIO[Raii]
+    implicit private[raii] def raiiInstances: MonadError[Raii, Throwable] with LiftIO[Raii]
   }
 
   private val ParallelContinuationInstances = parallelContinuationInstances
@@ -71,14 +62,12 @@ object raii {
   val opacityTypes: OpacityTypes = new Serializable with OpacityTypes { outer =>
     override type Raii[+A] = Parallel[TryT[RaiiContinuation, +?], A]
 
-    override private[raii] def fromTryT[A](parallelTryT: Parallel[TryT[RaiiContinuation, +?], A]): Raii[A] =
+    override private[raii] def wrapToRaii[A](parallelTryT: Parallel[TryT[RaiiContinuation, +?], A]): Raii[A] =
       parallelTryT
 
-    override private[raii] def toTryT[A](raii: Raii[A]): Parallel[TryT[RaiiContinuation, +?], A] = raii
+    override private[raii] def unwrapRaii[A](raii: Raii[A]): Parallel[TryT[RaiiContinuation, +?], A] = raii
 
-    implicit private[raii] def parallelRaiiMonadErrorInstances
-      : MonadError[Parallel[TryT[RaiiContinuation, +?], ?], Throwable] with LiftIO[
-        Parallel[TryT[RaiiContinuation, +?], ?]] = ParallelRaiiInstances
+    implicit private[raii] def raiiInstances: MonadError[Raii, Throwable] with LiftIO[Raii] = ParallelRaiiInstances
 
   }
 
@@ -87,9 +76,9 @@ object raii {
     * == Features of `Raii` ==
     *  - [[com.thoughtworks.zerocost.tryt.TryT exception handling]]
     *  - [[com.thoughtworks.zerocost.resourcet.ResourceT automatic resource management]]
-    *  - [[raii.AsynchronousRaiiOps.shared reference counting]]
+    *  - [[RaiiOps.shared reference counting]]
     *  - [[com.thoughtworks.zerocost.continuation.UnitContinuation raii programming]]
-    *  - [[ParallelRaii parallel computing]]
+    *  - [[Parallel parallel computing]]
     *
     * @note This `Raii` type is an [[https://www.reddit.com/r/scala/comments/5qbdgq/value_types_without_anyval/dcxze9q/ opacity alias]] to `UnitContinuation[Resource[UnitContinuation, Try[A]]]`.
     * @see [[Raii$ Raii]] companion object for all type classes and helper functions for this `Raii` type.
@@ -103,19 +92,19 @@ object raii {
     *       in the case of multiple tasks report errors in parallel.
     * @group Type classes
     */
-  implicit def parallelRaiiMonadErrorInstances: MonadError[Raii, Throwable] =
-    opacityTypes.parallelRaiiMonadErrorInstances
+  implicit def raiiInstances: MonadError[Raii, Throwable] =
+    opacityTypes.raiiInstances
 
   /** The companion object of [[Raii]]
     *
-    * @define pure             Converts a strict value to a `Raii` whose [[parallel.Resource.release release]] operation is no-op.
+    * @define pure             Converts a strict value to a `Raii` whose [[resourcet.Resource.release release]] operation is no-op.
     * @define seenow           @see [[pure]] for strict garbage collected `Raii`
-    * @define delay            Returns a non-strict `Raii` whose [[parallel.Resource.release release]] operation is no-op.
+    * @define delay            Returns a non-strict `Raii` whose [[resourcet.Resource.release release]] operation is no-op.
     * @define seedelay         @see [[delay]] for non-strict garbage collected `Raii`
-    * @define autocloseable    Returns a non-strict `Raii` whose [[parallel.Resource.release release]] operation is [[java.lang.AutoCloseable.close]].
-    * @define releasable       Returns a non-strict `Raii` whose [[parallel.Resource.release release]] operation is raii.
+    * @define autocloseable    Returns a non-strict `Raii` whose [[resourcet.Resource.release release]] operation is [[java.lang.AutoCloseable.close]].
+    * @define releasable       Returns a non-strict `Raii` whose [[resourcet.Resource.release release]] operation is raii.
     * @define seeautocloseable @see [[autoCloseable]] for auto-closeable `Raii`
-    * @define seereleasable    @see [[monadicCloseable]] for creating a `Raii` whose [[parallel.Resource.release release]] operation is raii.
+    * @define seereleasable    @see [[monadicCloseable]] for creating a `Raii` whose [[resourcet.Resource.release release]] operation is raii.
     * @define nonstrict        Since the `Raii` is non-strict,
     *                          `A` will be recreated each time it is sequenced into a larger `Raii`.
     * @define garbageCollected `A` must be a garbage-collected type that does not hold native resource.
@@ -135,11 +124,11 @@ object raii {
     }
 
     def apply[A](parallelTryT: Parallel[TryT[ResourceT[UnitContinuation, +?], +?], A]): Raii[A] = {
-      opacityTypes.fromTryT(parallelTryT)
+      opacityTypes.wrapToRaii(parallelTryT)
     }
 
     def unapply[A](raii: Raii[A]): Some[Parallel[TryT[ResourceT[UnitContinuation, `+?`], +?], A]] = {
-      Some(opacityTypes.toTryT(raii))
+      Some(opacityTypes.unwrapRaii(raii))
     }
 
     /** $releasable
@@ -287,21 +276,21 @@ object raii {
       Raii(Parallel(TryT(ResourceT.delay(Try(value)))))
     }
 
-    /** Returns a nested scope of `doA`.
+    /** Returns a nested scope of `raiiA`.
       *
       * All resources created during building `A` will be released after `A` is built.
       *
-      * @note `A` must be a garbage collected type, i.e. not a [[java.lang.AutoCloseable]] or a [[com.thoughtworks.raii.MonadicCloseable]]
-      * @note This method has the same behavior as `Raii.garbageCollected(doA.run)`.
+      * @note `A` must be a garbage collected type, i.e. not a [[java.lang.AutoCloseable]] or a [[resourcet.MonadicCloseable]]
+      * @note This method has the same behavior as `Raii.garbageCollected(raiiA.run)`.
       * @see [[garbageCollected]] for creating a garbage collected `Raii`
-      * @see [[AsynchronousRaiiOps.run]] for running a `Raii` as a [[com.thoughtworks.future.Task ThoughtWorks Task]].
+      * @see [[AsynchronousRaiiOps.run]] for running a `Raii` as a [[task.Task Task]].
       */
-    def nested[A](doA: Raii[A]): Raii[A] = {
-      val Raii(Parallel(TryT(resourceT))) = doA
+    def nested[A](raiiA: Raii[A]): Raii[A] = {
+      val Raii(Parallel(TryT(resourceT))) = raiiA
       Raii(Parallel(TryT(ResourceT.nested(resourceT))))
     }
 
-    /** $now
+    /** $pure
       * $garbageCollected
       * $seedelay
       * $seeautocloseable
@@ -324,7 +313,7 @@ object raii {
 
     /** Returns a `Raii` that runs in `executorContext`.
       *
-      * @note This method is usually been used for changing the current thread.
+      * @note This method is usually used for changing the current thread.
       *
       *       {{{
       *       import java.util.concurrent._
@@ -360,15 +349,15 @@ object raii {
 
   }
 
-  implicit final class AsynchronousRaiiOps[A](asynchronousRaii: Raii[A]) {
+  implicit final class RaiiOps[A](raii: Raii[A]) {
 
     def onComplete(continue: Resource[UnitContinuation, Try[A]] => Unit) = {
-      val Raii(Parallel(TryT(ResourceT(continuation)))) = asynchronousRaii
+      val Raii(Parallel(TryT(ResourceT(continuation)))) = raii
       continuation.onComplete(continue)
     }
 
     def safeOnComplete(continue: Resource[UnitContinuation, Try[A]] => TailRec[Unit]) = {
-      val Raii(Parallel(TryT(ResourceT(continuation)))) = asynchronousRaii
+      val Raii(Parallel(TryT(ResourceT(continuation)))) = raii
       continuation.safeOnComplete(continue)
     }
 
@@ -379,19 +368,19 @@ object raii {
       *       though `A` may use some non-garbage-collected resources during opening `A`.
       */
     def run: Task[A] = {
-      Task(TryT(ResourceT(toContinuation(asynchronousRaii)).run))
+      Task(TryT(ResourceT(toContinuation(raii)).run))
     }
 
-    /** Returns a `Raii` of `B` based on a `Raii` of `A` and a function that creates a `Raii` of `B`,
+    /** Returns a `Raii[B]` based on a `Raii[A]` and a function that creates a `Raii[B]`,
       * for those `B` do not reference to `A` or `A` is a garbage collected object.
       *
-      * @note `intransitiveFlatMap` is similar to `flatMap` in [[asynchronousRaiiMonadErrorInstances]],
+      * @note `intransitiveFlatMap` is similar to `flatMap` in [[raiiInstances]],
       *       except `intransitiveFlatMap` will release `A` right after `B` is created.
       *
       *       Raiin't use this method if you need to retain `A` until `B` is released.
       */
     def intransitiveFlatMap[B](f: A => Raii[B]): Raii[B] = {
-      val resourceA = ResourceT(toContinuation(asynchronousRaii))
+      val resourceA = ResourceT(toContinuation(raii))
       val resourceB = resourceA.intransitiveFlatMap[Try[B]] {
         case Failure(e) =>
           ResourceT(Continuation.pure(Resource.pure(Failure(e))))
@@ -402,23 +391,22 @@ object raii {
       fromContinuation(future)
     }
 
-    /** Returns a `Raii` of `B` based on a `Raii` of `A` and a function that creates `B`,
+    /** Returns a `Raii[B]` based on a `Raii[A]` and a function that creates `B`,
       * for those `B` do not reference to `A` or `A` is a garbage collected object.
       *
-      * @note `intransitiveMap` is similar to `map` in [[asynchronousRaiiMonadErrorInstances]],
+      * @note `intransitiveMap` is similar to `map` in [[raiiInstances]],
       *       except `intransitiveMap` will release `A` right after `B` is created.
       *
-      *       Raiin't use this method if you need to retain `A` until `B` is released.
+      *       Don't use this method if you need to retain `A` until `B` is released.
       */
     def intransitiveMap[B](f: A => B): Raii[B] = {
-      val resourceA = ResourceT(toContinuation(asynchronousRaii))
+      val resourceA = ResourceT(toContinuation(raii))
       val resourceB = resourceA.intransitiveMap(_.map(f))
       val ResourceT(future) = resourceB
       fromContinuation(future)
     }
-
     // TODO: reference counting
-//    /** Converts `asynchronousRaii` to a reference counted wrapper.
+//    /** Converts `raii` to a reference counted wrapper.
 //      *
 //      * When the wrapper `Raii` is used by multiple larger `Raii` at the same time,
 //      * only one `A` instance is created.
@@ -426,9 +414,17 @@ object raii {
 //      * when all users [[covariant.Resource.release release]] the wrapper `Raii`.
 //      */
 //    def shared: Raii[A] = {
-//      val sharedTask: RaiiContinuation[Try[A]] = TryT.unwrap(opacityTypes.toTryT(asynchronousRaii)).shared
-//      opacityTypes.fromTryT(TryT(sharedTask))
+//      val sharedTask: RaiiContinuation[Try[A]] = TryT.unwrap(opacityTypes.unwrapRaii(raii)).shared
+//      opacityTypes.wrapToRaii(TryT(sharedTask))
 //    }
   }
 
+  private def fromContinuation[A](future: UnitContinuation[Resource[UnitContinuation, Try[A]]]): Raii[A] = {
+    Raii(Parallel(TryT[RaiiContinuation, A](ResourceT(future))))
+  }
+
+  private def toContinuation[A](doValue: Raii[A]): UnitContinuation[Resource[UnitContinuation, Try[A]]] = {
+    val Raii(Parallel(TryT(ResourceT(future)))) = doValue
+    future
+  }
 }

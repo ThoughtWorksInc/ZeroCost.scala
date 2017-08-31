@@ -229,7 +229,7 @@ object task {
 
   }
 
-  /** [[com.thoughtworks.zerocost.Parallel Parallel]]-tagged type of [[Task]] that needs to be executed in parallel when using an [[cats.Applicative]] instance
+  /** [[parallel.Parallel Parallel]]-tagged type of [[Task]] that needs to be executed in parallel when using an [[cats.Applicative]] instance
     * @template
     *
     * @example Given a momoized [[Task]],

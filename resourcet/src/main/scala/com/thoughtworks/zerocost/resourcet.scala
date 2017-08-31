@@ -279,7 +279,7 @@ object resourcet extends ResourceTInstances0 {
       *
       * @note After [[release]], [[value]] should not be used if:
       *       - [[value]] is a scoped native resource,
-      *         e.g. this [[Resource]] is created from [[com.thoughtworks.zerocost.raii.Raii.autoCloseable[Value<:AutoCloseable](value:=>Value)* scoped]],
+      *         e.g. this [[Resource]] is created from [[com.thoughtworks.zerocost.raii.Raii.autoCloseable* autoCloseable]],
       *       - or, [[value]] internally references some scoped native resources.
       */
     def release: F[Unit]
