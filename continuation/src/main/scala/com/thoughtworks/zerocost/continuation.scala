@@ -12,6 +12,7 @@ import scala.util.control.TailCalls
 import scala.util.control.TailCalls.TailRec
 
 /** The name space that contains [[continuation.Continuation]] and utilities for `Continuation`.
+  *
   * @author 杨博 (Yang Bo)
   */
 object continuation {
@@ -24,6 +25,7 @@ object continuation {
     type ParallelContinuation[R, A] = Parallel[Continuation[R, +?], A]
 
     def toFunction[R, A](continuation: Continuation[R, A]): (A => TailRec[R]) => TailRec[R]
+
     def fromFunction[R, A](continuation: (A => TailRec[R]) => TailRec[R]): Continuation[R, A]
   }
 
@@ -44,10 +46,12 @@ object continuation {
     type Continuation[R, +A] = (A => TailRec[R]) => TailRec[R]
 
     def toFunction[R, A](continuation: Continuation[R, A]): (A => TailRec[R]) => TailRec[R] = continuation
+
     def fromFunction[R, A](continuation: (A => TailRec[R]) => TailRec[R]): Continuation[R, A] = continuation
   }
 
   /** The stack-safe and covariant version of Continuations.
+    *
     * @note The underlying type of this `Continuation` is `(A => TailRec[R]) => TailRec[R]`.
     * @see [[ContinuationOps]] for extension methods for this `Continuation`.
     * @see [[UnitContinuation]] if you want to use this `Continuation` as an asynchronous task.
@@ -68,6 +72,7 @@ object continuation {
   type UnitContinuation[+A] = Continuation[Unit, A]
 
   /** Extension methods for [[Continuation]]
+    *
     * @group Implicit Views
     */
   implicit final class ContinuationOps[R, A](val underlying: Continuation[R, A]) extends AnyVal {
@@ -103,11 +108,12 @@ object continuation {
   }
 
   /** Extension methods for [[UnitContinuation]]
+    *
     * @group Implicit Views
     */
   implicit final class UnitContinuationOps[A](val underlying: UnitContinuation[A]) extends AnyVal {
 
-    /** Returns a memoized [[scala.concurrent.Future]] for the [[underlying]] [[UnitContinuation]].*/
+    /** Returns a memoized [[scala.concurrent.Future]] for the [[underlying]] [[UnitContinuation]]. */
     def toScalaFuture: Future[A] = {
       val promise = Promise[A]
       ContinuationOps[Unit, A](underlying).onComplete { a =>
@@ -116,7 +122,7 @@ object continuation {
       promise.future
     }
 
-    /** Blocking waits and returns the result value of the [[underlying]] [[UnitContinuation]].*/
+    /** Blocking waits and returns the result value of the [[underlying]] [[UnitContinuation]]. */
     def blockingAwait(): A = {
       val box: SyncVar[A] = new SyncVar
       underlying.onComplete { (a: A) =>
@@ -131,70 +137,70 @@ object continuation {
     * @example Given two [[ParallelContinuation]]s that contain immediate values,
     *
     *          {{{
-    *          import com.thoughtworks.zerocost.parallel._
-    *          import com.thoughtworks.zerocost.continuation._
+    *                    import com.thoughtworks.zerocost.parallel._
+    *                    import com.thoughtworks.zerocost.continuation._
     *
-    *          val pc0: ParallelContinuation[Int] = Parallel(Continuation.pure[Unit, Int](40))
-    *          val pc1: ParallelContinuation[Int] = Parallel(Continuation.pure[Unit, Int](2))
+    *                    val pc0: ParallelContinuation[Int] = Parallel(Continuation.pure[Unit, Int](40))
+    *                    val pc1: ParallelContinuation[Int] = Parallel(Continuation.pure[Unit, Int](2))
     *          }}}
     *
     *          when map them together,
     *
     *          {{{
-    *          import cats.syntax.all._
-    *          val result: ParallelContinuation[Int] = (pc0, pc1).mapN(_ + _)
+    *                    import cats.syntax.all._
+    *                    val result: ParallelContinuation[Int] = (pc0, pc1).mapN(_ + _)
     *          }}}
     *
     *          then the result should be a `ParallelContinuation` as well,
     *          and it is able to convert to a normal [[Continuation]]
     *
     *          {{{
-    *          val Parallel(contResult) = result
-    *          contResult.map {
-    *            _ should be(42)
-    *          }.toScalaFuture
+    *                    val Parallel(contResult) = result
+    *                    contResult.map {
+    *                      _ should be(42)
+    *                    }.toScalaFuture
     *          }}}
     * @example Given two [[ParallelContinuation]]s,
     *          each of them modifies a `var`,
     *
     *          {{{
-    *          import com.thoughtworks.zerocost.parallel._
-    *          import com.thoughtworks.zerocost.continuation._
+    *                    import com.thoughtworks.zerocost.parallel._
+    *                    import com.thoughtworks.zerocost.continuation._
     *
-    *          var count0 = 0
-    *          var count1 = 0
+    *                    var count0 = 0
+    *                    var count1 = 0
     *
-    *          val pc0: ParallelContinuation[Unit] = Parallel(Continuation.delay {
-    *            count0 += 1
-    *          })
-    *          val pc1: ParallelContinuation[Unit] = Parallel(Continuation.delay {
-    *            count1 += 1
-    *          })
+    *                    val pc0: ParallelContinuation[Unit] = Parallel(Continuation.delay {
+    *                      count0 += 1
+    *                    })
+    *                    val pc1: ParallelContinuation[Unit] = Parallel(Continuation.delay {
+    *                      count1 += 1
+    *                    })
     *          }}}
     *
     *          when map them together,
     *
     *          {{{
-    *          import cats.syntax.all._
-    *          val result: ParallelContinuation[Unit] = (pc0, pc1).mapN{ (u0: Unit, u1: Unit) => }
+    *                    import cats.syntax.all._
+    *                    val result: ParallelContinuation[Unit] = (pc0, pc1).mapN{ (u0: Unit, u1: Unit) => }
     *          }}}
     *
     *          then the two vars have not been modified right now,
     *
     *          {{{
-    *          count0 should be(0)
-    *          count1 should be(0)
+    *                    count0 should be(0)
+    *                    count1 should be(0)
     *          }}}
     *
     *          when the result `ParallelContinuation` get done,
     *          then two vars should be modified only once for each.
     *
     *          {{{
-    *          val Parallel(contResult) = result
-    *          contResult.map { _: Unit =>
-    *            count0 should be(1)
-    *            count1 should be(1)
-    *          }.toScalaFuture
+    *                    val Parallel(contResult) = result
+    *                    contResult.map { _: Unit =>
+    *                      count0 should be(1)
+    *                      count1 should be(1)
+    *                    }.toScalaFuture
     *          }}}
     * @template
     */
@@ -255,6 +261,7 @@ object continuation {
 
     private final case class Async[R, A](start: (A => R) => R) extends ((A => TailRec[R]) => TailRec[R]) {
       override def apply(continue: (A) => TailRec[R]): TailRec[R] = {
+        val start0 = start
         TailCalls.tailcall {
           TailCalls.done {
             start { a =>
@@ -274,8 +281,11 @@ object continuation {
     }
 
     private final case class Pure[R, A](a: A) extends ((A => TailRec[R]) => TailRec[R]) {
-      override def apply(continue: (A) => TailRec[R]): TailRec[R] = suspendTailRec {
-        continue(a)
+      override def apply(continue: (A) => TailRec[R]): TailRec[R] = {
+        val a0 = a
+        suspendTailRec {
+          continue(a0)
+        }
       }
     }
 
@@ -284,7 +294,10 @@ object continuation {
     def pure[R, A](a: A): Continuation[R, A] = safeAsync(Pure(a))
 
     private final case class Delay[R, A](block: () => A) extends ((A => TailRec[R]) => TailRec[R]) {
-      override def apply(continue: (A) => TailRec[R]): TailRec[R] = suspendTailRec(continue(block()))
+      override def apply(continue: (A) => TailRec[R]): TailRec[R] = {
+        val block0 = block
+        suspendTailRec(continue(block0()))
+      }
     }
 
     /** Returns a [[Continuation]] of a blocking operation */
@@ -296,7 +309,7 @@ object continuation {
 
     @inline
     private[thoughtworks] def safeOnComplete[R, A](continuation: Continuation[R, A])(
-        continue: A => TailRec[R]): TailRec[R] = {
+      continue: A => TailRec[R]): TailRec[R] = {
       suspendTailRec {
         opacityTypes.toFunction(continuation)(continue)
       }
@@ -307,9 +320,10 @@ object continuation {
       opacityTypes.fromFunction[R, A](start)
     }
 
-    final case class Suspend[R, A](continuation: () => Continuation[R, A]) extends ((A => TailRec[R]) => TailRec[R]) {
+    private final case class Suspend[R, A](continuation: () => Continuation[R, A]) extends ((A => TailRec[R]) => TailRec[R]) {
       def apply(continue: (A) => TailRec[R]): TailRec[R] = {
-        continuation().safeOnComplete(continue)
+        val continuation0 = continuation
+        continuation0().safeOnComplete(continue)
       }
     }
 
@@ -326,9 +340,9 @@ object continuation {
       *
       * @example This `unapply` can be used in pattern matching expression.
       *          {{{
-      *          import com.thoughtworks.zerocost.continuation.Continuation
-      *          val Continuation(f) = Continuation.pure[Unit, Int](42)
-      *          f should be(a[Function1[_, _]])
+      *                    import com.thoughtworks.zerocost.continuation.Continuation
+      *                    val Continuation(f) = Continuation.pure[Unit, Int](42)
+      *                    f should be(a[Function1[_, _]])
       *          }}}
       *
       */
@@ -339,41 +353,50 @@ object continuation {
   }
 
   private final case class Bind[R, A, B](fa: Continuation[R, A], f: (A) => Continuation[R, B])
-      extends ((B => TailRec[R]) => TailRec[R]) {
+    extends ((B => TailRec[R]) => TailRec[R]) {
     def apply(continue: (B) => TailRec[R]): TailRec[R] = {
-      Continuation.safeOnComplete[R, A](fa) { a =>
-        Continuation.safeOnComplete[R, B](f(a))(continue)
+      val fa0 = fa
+      val f0 = f
+      Continuation.safeOnComplete[R, A](fa0) { a =>
+        Continuation.safeOnComplete[R, B](f0(a))(continue)
       }
     }
   }
+
   private final case class Map[R, A, B](fa: Continuation[R, A], f: (A) => B) extends ((B => TailRec[R]) => TailRec[R]) {
     def apply(continue: (B) => TailRec[R]): TailRec[R] = {
-      Continuation.safeOnComplete(fa) { a: A =>
-        suspendTailRec(continue(f(a)))
+      val fa0 = fa
+      val f0 = f
+      Continuation.safeOnComplete(fa0) { a: A =>
+        suspendTailRec(continue(f0(a)))
       }
     }
   }
 
   private final case class Join[R, A](ffa: Continuation[R, Continuation[R, A]])
-      extends ((A => TailRec[R]) => TailRec[R]) {
+    extends ((A => TailRec[R]) => TailRec[R]) {
     def apply(continue: A => TailRec[R]): TailRec[R] = {
-      Continuation.safeOnComplete[R, Continuation[R, A]](ffa) { fa =>
+      val ffa0 = ffa
+      Continuation.safeOnComplete[R, Continuation[R, A]](ffa0) { fa =>
         Continuation.safeOnComplete[R, A](fa)(continue)
       }
     }
   }
 
   private final case class TailrecM[R, A, B](f: (A) => Continuation[R, Either[A, B]], a: A)
-      extends ((B => TailRec[R]) => TailRec[R]) {
+    extends ((B => TailRec[R]) => TailRec[R]) {
     def apply(continue: (B) => TailRec[R]): TailRec[R] = {
+      val f0 = f
+
       def loop(a: A): TailRec[R] = {
-        Continuation.safeOnComplete(f(a)) {
+        Continuation.safeOnComplete(f0(a)) {
           case Left(a) =>
             loop(a)
           case Right(b) =>
             suspendTailRec(continue(b))
         }
       }
+
       loop(a)
     }
 
@@ -401,14 +424,14 @@ object continuation {
     * @group Type class instances
     * @note When creating two no-op [[Continuation]]s from `continuationInstances.unit`,
     *       {{{
-    *       import com.thoughtworks.zerocost.continuation._
-    *       import cats.Applicative
-    *       val noop0 = Applicative[UnitContinuation].unit
-    *       val noop1 = Applicative[UnitContinuation].unit
+    *              import com.thoughtworks.zerocost.continuation._
+    *              import cats.Applicative
+    *              val noop0 = Applicative[UnitContinuation].unit
+    *              val noop1 = Applicative[UnitContinuation].unit
     *       }}}
     *       then the two no-op should equal to each other.
     *       {{{
-    *       noop0 should be(noop1)
+    *              noop0 should be(noop1)
     *       }}}
     */
   implicit def continuationInstances[R]: Monad[Continuation[R, +?]] with LiftIO[Continuation[R, +?]] =
@@ -433,7 +456,7 @@ object continuation {
               @tailrec
               def continueA(state: AtomicReference[ParallelZipState[A, B]], a: A): TailRec[Unit] = {
                 state.get() match {
-                  case oldState @ GotNeither() =>
+                  case oldState@GotNeither() =>
                     if (state.compareAndSet(oldState, GotA(a))) {
                       TailCalls.done(())
                     } else {
@@ -448,13 +471,15 @@ object continuation {
                     }
                 }
               }
+
               Continuation.safeOnComplete(fa)(continueA(state, _))
             }
+
             def listenB(state: AtomicReference[ParallelZipState[A, B]]): TailRec[Unit] = {
               @tailrec
               def continueB(state: AtomicReference[ParallelZipState[A, B]], b: B): TailRec[Unit] = {
                 state.get() match {
-                  case oldState @ GotNeither() =>
+                  case oldState@GotNeither() =>
                     if (state.compareAndSet(oldState, GotB(b))) {
                       TailCalls.done(())
                     } else {
@@ -469,8 +494,10 @@ object continuation {
                     }
                 }
               }
+
               Continuation.safeOnComplete(fb)(continueB(state, _))
             }
+
             val state = new AtomicReference[ParallelZipState[A, B]](GotNeither())
 
             listenA(state).flatMap { _: Unit =>
