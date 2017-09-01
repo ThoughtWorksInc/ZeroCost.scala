@@ -52,7 +52,7 @@ private[thoughtworks] sealed abstract class ResourceTInstances0 extends Resource
     }
 }
 
-/** The namespace that contains the covariant [[ResourceT]].
+/** The [[http://docs.scala-lang.org/style/naming-conventions.html#objects mimic package]] that contains the covariant [[ResourceT]].
   *
   * Usage:
   * {{{

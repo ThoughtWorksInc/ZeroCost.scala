@@ -64,7 +64,7 @@ private[zerocost] sealed abstract class TryTInstances0 extends TryTInstances1 { 
     }
 }
 
-/** The namespace that contains the covariant [[TryT]]. */
+/** The [[http://docs.scala-lang.org/style/naming-conventions.html#objects mimic package]] that contains the covariant [[TryT]]. */
 object tryt extends TryTInstances0 with Serializable {
 
   private[zerocost] trait OpacityTypes extends Serializable {

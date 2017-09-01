@@ -18,7 +18,7 @@ import cats.syntax.all._
 
 import scala.util.control.TailCalls.TailRec
 
-/** The namespace that contains [[Raii]].
+/** The [[http://docs.scala-lang.org/style/naming-conventions.html#objects mimic package]] that contains [[Raii]].
   *
   * @author 杨博 (Yang Bo) &lt;pop.atry@gmail.com&gt;
   */
