@@ -1,179 +1,174 @@
 package com.thoughtworks.zerocost
 
-import java.io.{ObjectOutputStream, ByteArrayOutputStream, ObjectInputStream, ByteArrayInputStream}
-import scala.util.{Failure, Success, Try, DynamicVariable}
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.event.{Logging, LogSource}
-import akka.pattern.ask
-import akka.util.Timeout
-import com.thoughtworks.zerocost.tryt._
-import com.thoughtworks.zerocost.continuation._
-import com.thoughtworks.zerocost.task._
-import com.thoughtworks.zerocost.raii._
-import com.thoughtworks.zerocost.resourcet._
-import scala.concurrent.duration.{SECONDS, FiniteDuration}
-import cats.syntax.all._
+import akka.actor.Status.Success
+import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props, SupervisorStrategy}
+import com.thoughtworks.zerocost.continuation.UnitContinuation
+import com.thoughtworks.zerocost.raii.{Raii, _}
+import com.thoughtworks.zerocost.resourcet.Resource
 
-/** The only type of message a [[RemoteActor]] receives.
-  * It really should contain [[Remote.RemoteContinuation[ActorRef]]], but we send raw buffer to apply a bit of hack to the default Java deserialization process.
-  */
-case class Dispatch(remoteContinuationBuffer: Array[Byte])
+import scala.annotation.tailrec
+import scala.util.Try
+import scala.util.control.NonFatal
+import scala.util.control.TailCalls.TailRec
 
-/**
-  * The reply message a [[RemoteActor]] guarantees to send.
-  */
-case class Receipt[A](receipt: Try[A])
+///**
+//  * @author 杨博 (Yang Bo)
+//  */
+//class Remote extends Actor {
+//  override def receive = ???
+//}
 
-class RemoteActor extends Actor {
+trait Remote {
 
-  import Remote.{RemoteContinuation, actorSystemStore}
+  def execute[A](f: Remote => Raii[A]): Raii[A]
 
-  override def receive: Receive = {
-    case Dispatch(remoteContinuationBuffer) =>
-      val remoteContinuation: RemoteContinuation[ActorRef] = actorSystemStore.withValue(context.system) {
-        new ObjectInputStream(new ByteArrayInputStream(remoteContinuationBuffer))
-          .readObject()
-          .asInstanceOf[RemoteContinuation[ActorRef]]
-      }
-      val value: Try[ActorRef] = Success(self)
-      val actorSystem = context.system.asInstanceOf[Remote].actorSystem
-      val release: UnitContinuation[Unit] = UnitContinuation.delay {
-        actorSystem.stop(self)
-      }
-      val remoteContinuationParameter: Resource[UnitContinuation, Try[ActorRef]] = Resource(value, release)
-      remoteContinuation(remoteContinuationParameter)
-      sender ! Receipt(value)
-  }
 }
 
-/** The class that implements automatic remote execution.
-  *
-  * @author 邵成 (Shao Cheng) &lt;astrohavoc@gmail.com&gt;
-  * @example Given a lazy [[ActorSystem]] and an implicit [[Timeout]] in scope, one can construct a [[Raii[Remote]]]
-  *          {{{
-  *          import com.thoughtworks.zerocost.raii._
-  *          import com.thoughtworks.zerocost.task._
-  *          import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-  *          import akka.util.Timeout
-  *          import scala.concurrent.duration.{SECONDS, FiniteDuration}
-  *          import cats.syntax.all._
-  *          import com.thoughtworks.each.Monadic._
-  *
-  *          implicit val timeout: Timeout = FiniteDuration(10, SECONDS)
-  *          val makeRemote: Raii[Remote] = Remote(ActorSystem("actorSystem"))
-  *          }}}
-  *
-  *          The [[Remote]] type exposes a [[jump]] interface, which can be used as follows:
-  *          (the first snippet works with an upcoming major version of each)
-  *
-  *         `<pre>
-  *          val m: Raii[Int] = monadic[Raii] {
-  *            val remote = makeRemote.each
-  *            val x = Raii.pure(6).each
-  *            remote.jump.each
-  *            val y = Raii.pure(7).each
-  *            x * y
-  *          }
-  *          </pre>`
-  *
-  *          {{{
-  *          val m: Raii[Int] = makeRemote.flatMap { remote => {
-  *            Raii.pure(6).flatMap { x =>
-  *              remote.jump.flatMap { _ =>
-  *                Raii.pure(7).flatMap { y =>
-  *                 Raii.pure(x * y)
-  *                }
-  *              }
-  *            }
-  *          }}
-  *          m.run.blockingAwait should be(42)
-  *          }}}
-  */
+// TODO:
+// 1. 把现有代码搬到object Remote里面，免得闭包不小心引用了Actor
+// 2. 先不用watch，假装不会出错，实现基于Raii的远程调用（不要试图封装成Future或者UnitContinuation，因为即使封装了，用map/flatMap也仍然会导致序列化过大的问题，必须避免封装成异步对象）
+// 3. 加上watch
 
-class Remote(val actorSystem: ActorSystem)(implicit val timeout: Timeout) extends Serializable {
+object Remote {
 
-  import Remote._
-  import actorSystem.dispatcher
-
-  val log = {
-    implicit val logSource: LogSource[Remote] = new Serializable with LogSource[Remote] {
-      override def genString(t: Remote): String = toString
-    }
-    Logging(actorSystem, this)
+  private trait OpacityTypes {
+    type RemoteObjectToken[+A] <: Int
+    def wrapToRemoteObjectToken[A](token: Int): RemoteObjectToken[A]
   }
 
-  log.info(s"remote context $this constructed")
+  private val opacityTypes = new OpacityTypes {
+    override type RemoteObjectToken[+A] = Int
 
-  def jump: Raii[ActorRef] = Raii.async { (remoteContinuation: RemoteContinuation[ActorRef]) =>
-  {
-    log.info(s"jump of $this is invoked")
+    override def wrapToRemoteObjectToken[A](token: Int) = token
+  }
+  import opacityTypes._
 
-    val newActor = actorSystem.actorOf(Props(new RemoteActor))
-    val remoteContinuationBuffer = {
-      val byteArrayOutputStream = new ByteArrayOutputStream()
-      new ObjectOutputStream(byteArrayOutputStream).writeObject(remoteContinuation)
-      byteArrayOutputStream.toByteArray
+  final case class Complete[A](a: A)
+  final case class Rpc()
+
+  final class RemoteActor[A](f: Remote => Raii[A]) extends Actor with Remote {
+
+    f(this).onComplete { resource =>
+      post(_.completeHandler(resource))
     }
 
-    (newActor ? Dispatch(remoteContinuationBuffer)).onComplete {
-      case Success(Receipt(receipt)) =>
-        receipt match {
-          case Success(returnedActor) => log.info(s"remote execution returned from $returnedActor")
-          case Failure(err)           => log.error(s"remote execution failed with $err")
-        }
-      case Failure(err) => log.error(s"akka messaging failed with $err")
-    }
+    private val children = scala.collection.mutable.HashMap.empty[ActorRef, Resource[UnitContinuation, Try[_]] => Unit]
 
-  }
-  }
+    private var tokenSeed = 0
 
-  def writeReplace: Any = {
-    log.info(s"writeReplace of $this is invoked")
-    RemoteProxy
-  }
-}
-
-case object Remote {
-  type RemoteContinuation[A] = (Resource[UnitContinuation, Try[A]]) => Unit
-
-  val actorSystemStore: DynamicVariable[ActorSystem] = new DynamicVariable[ActorSystem](null)
-
-  object RemoteProxy extends Serializable {
-    def readResolve: Any = {
-      val actorSystem = actorSystemStore.value
-      implicit val timeout: Timeout = FiniteDuration(10, SECONDS)
-      val remote = new Remote(actorSystem)
-      val log = {
-        implicit val logSource: LogSource[Remote] = new Serializable with LogSource[Remote] {
-          override def genString(t: Remote): String = toString
-        }
-        Logging(remote.actorSystem, remote)
+    @tailrec
+    private def findAvailableToken(rawToken: Int): Int = {
+      if (remoteObjects.contains(rawToken)) {
+        findAvailableToken(rawToken + 1)
+      } else {
+        rawToken
       }
-      log.info(s"readResolve of $remote is invoked")
-      remote
+    }
+
+    private def nextToken(): Int = {
+      val rawToken = findAvailableToken(tokenSeed)
+      tokenSeed = rawToken + 1
+      rawToken
+    }
+
+    private val remoteObjects = scala.collection.mutable.HashMap.empty[Int, Any]
+
+    private def store[A](x: A): RemoteObjectToken[A] = {
+      val rawToken = nextToken()
+      remoteObjects(rawToken) = x
+      wrapToRemoteObjectToken(rawToken)
+    }
+
+    private def get(token: RemoteObjectToken[A]): A = {
+      remoteObjects(token).asInstanceOf[A]
+    }
+
+    private def release(releaseToken: RemoteObjectToken[UnitContinuation[Unit]]): Unit = {
+      get(releaseToken)
+      ???
+    }
+
+    private def remoteSuccess[B](b: B, releaseToken: RemoteObjectToken[UnitContinuation[Unit]]): Unit = {
+      val ownerRef = sender()
+      Resource(b, UnitContinuation.delay {
+        ownerRef ! { owner: RemoteActor[B] =>
+          owner.release(releaseToken)
+        }
+      })
+
+      ???
+    }
+
+    private def completeHandler(resource: Resource[UnitContinuation, Try[A]]): Unit = {
+      val Resource(tryA, releaseA) = resource
+
+      tryA match {
+        case scala.util.Success(a) =>
+          val releaseToken = store(releaseA)
+          context.parent ! { parent: RemoteActor[_] =>
+            parent.remoteSuccess(a, releaseToken)
+          }
+        case scala.util.Failure(e) =>
+          ???
+      }
+
+    }
+
+    override def receive: Receive = {
+      case message =>
+        message.asInstanceOf[this.type => Unit](this)
+    }
+
+    private def start[B](remoteCode: Remote => Raii[B], continue: Resource[UnitContinuation, Try[B]] => Unit): Unit = {
+      val actorRef = context.actorOf(Props(new RemoteActor(remoteCode)))
+      children(actorRef) = continue.asInstanceOf[Resource[UnitContinuation, Try[_]] => Unit]
+    }
+
+    override def execute[B](remoteCode: Remote => Raii[B]): Raii[B] = {
+      Raii.async { continue =>
+        post(_.start(remoteCode, continue))
+      }
+    }
+
+    private def post(f: this.type => Unit): Unit = {
+      self ! f
+    }
+
+    private def postTo[A](actorRef: ActorRef)(f: RemoteActor[A] => Unit): Unit = {
+      actorRef ! f
+    }
+
+    override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy() {
+      case NonFatal(e) =>
+        sender()
+        ???
     }
   }
 
-  def apply(makeActorSystem: => ActorSystem)(implicit timeout: Timeout): Raii[Remote] = {
-    Raii.resource {
-      val actorSystem = makeActorSystem
-      Resource(
-        new Remote(actorSystem),
-        UnitContinuation.delay {
-          import actorSystem.dispatcher
-          val Task(TryT(tryFinalizer)) = actorSystem.terminate.toTask
-          val log = {
-            implicit val logSource: LogSource[Remote.this.type] = new Serializable with LogSource[Remote.this.type] {
-              override def genString(t: Remote.this.type): String = toString
-            }
-            Logging(actorSystem, this)
-          }
-          tryFinalizer.map {
-            case Success(_)   => log.info(s"actorSystem $actorSystem terminated")
-            case Failure(err) => log.error(s"termination of actorSystem $actorSystem failed with $err")
-          }
-        }.flatten
-      )
-    }
-  }
+//  trait Akka extends Remote {
+//    def actorSystem: ActorSystem
+//
+//    override def execute[A](f: Remote => Raii[A]): Raii[A] = {
+//
+//      Raii.async { continue =>
+//        val actorRef = actorSystem.actorOf(Props(new RemoteActor(f)))
+//
+//        ???
+//      }
+//
+//    }
+//  }
+
+//
+//  def root(actorSystem: ActorSystem): Remote = {
+//    new Remote {
+//      override def execute[A](f: (Remote) => Raii[A]): Raii[A] = {
+//
+//        actorSystem.actorOf()
+//        ???
+//      }
+//    }
+//
+//  }
+
 }
