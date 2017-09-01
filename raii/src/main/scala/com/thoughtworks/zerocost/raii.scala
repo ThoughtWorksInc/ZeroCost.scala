@@ -154,11 +154,6 @@ object raii {
       )
     }
 
-    @deprecated(message = "Use [[autoCloseable]] instead.", since = "3.0.0")
-    def scoped[A <: AutoCloseable](future: Task[A]): Raii[A] = {
-      autoCloseable(future)
-    }
-
     /** $autocloseable
       * $nonstrict
       * $seenow
@@ -183,12 +178,6 @@ object raii {
             )
         }
       )
-    }
-
-    @deprecated(message = "Use [[autoCloseable]] instead.", since = "3.0.0")
-    def scoped[A <: AutoCloseable](future: UnitContinuation[A],
-                                   dummyImplicit: DummyImplicit = DummyImplicit.dummyImplicit): Raii[A] = {
-      autoCloseable(future)
     }
 
     /** $releasable
