@@ -114,7 +114,7 @@ object continuation {
   implicit final class UnitContinuationOps[A](val underlying: UnitContinuation[A]) extends AnyVal {
 
     /** Returns a memoized [[scala.concurrent.Future]] for the [[underlying]] [[UnitContinuation]]. */
-    def toScalaFuture: Future[A] = {
+    def toFuture: Future[A] = {
       val promise = Promise[A]
       ContinuationOps[Unit, A](underlying).onComplete { a =>
         val _ = promise.success(a)
@@ -158,7 +158,7 @@ object continuation {
     *                    val Parallel(contResult) = result
     *                    contResult.map {
     *                      _ should be(42)
-    *                    }.toScalaFuture
+    *                    }.toFuture
     *          }}}
     * @example Given two [[ParallelContinuation]]s,
     *          each of them modifies a `var`,
@@ -200,7 +200,7 @@ object continuation {
     *                    contResult.map { _: Unit =>
     *                      count0 should be(1)
     *                      count1 should be(1)
-    *                    }.toScalaFuture
+    *                    }.toFuture
     *          }}}
     * @template
     */
