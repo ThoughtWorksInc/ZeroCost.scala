@@ -26,8 +26,9 @@ trait Remote {
 
 // TODO:
 // 1. 把现有代码搬到object Remote里面，免得闭包不小心引用了Actor
-// 2. 先不用watch，假装不会出错，实现基于Raii的远程调用（不要试图封装成Future或者UnitContinuation，因为即使封装了，用map/flatMap也仍然会导致序列化过大的问题，必须避免封装成异步对象）
-// 3. 加上watch
+// 2. 封装成Future或者UnitContinuation。注意，这种 API 不能支持jumpBack.each，但可以支持 nested 风格。
+// 3. 增加共享watch的功能
+// 4. 利用watch实现基于Raii的远程调用
 
 object Remote {
 
