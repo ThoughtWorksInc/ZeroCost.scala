@@ -11,7 +11,7 @@ import scala.language.existentials
 import scala.util.control.TailCalls
 import scala.util.control.TailCalls.TailRec
 
-/** The name space that contains [[continuation.Continuation]] and utilities for `Continuation`.
+/** The name space that contains [[Continuation]] and utilities for `Continuation`.
   *
   * @author 杨博 (Yang Bo)
   */
